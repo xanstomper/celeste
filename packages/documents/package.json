@@ -1,0 +1,35 @@
+{
+  "name": "@celeste/documents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Document generation pipelines for Celeste (DOCX, PDF, XLSX, PPTX, Markdown).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@celeste/protocol": "workspace:*",
+    "docx": "^9.0.3",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.15.1",
+    "pptxgenjs": "^3.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pdfkit": "^0.13.8",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

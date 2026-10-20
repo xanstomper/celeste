@@ -1,0 +1,33 @@
+{
+  "name": "celeste",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Celeste (codename Boba) - open-source AI browser agent that operates your real browser.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r --filter @celeste/extension build && pnpm -r --filter '!@celeste/extension' build",
+    "build:ext": "pnpm --filter @celeste/extension build",
+    "build:ui": "pnpm --filter @celeste/ui build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "dev": "pnpm --filter @celeste/cli dev",
+    "dev:ui": "pnpm --filter @celeste/ui dev",
+    "dev:ext": "pnpm --filter @celeste/extension dev",
+    "celeste": "pnpm --filter @celeste/cli start",
+    "mcp": "pnpm --filter @celeste/mcp start",
+    "verify:e2e": "node scripts/verify-e2e.mjs",
+    "clean": "pnpm -r exec rm -rf dist node_modules/.cache && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "ws": "^8.22.0"
+  }
+}

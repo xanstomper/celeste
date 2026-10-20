@@ -1,0 +1,128 @@
+/* -------------------------------------------------------------------------- */
+/* Celeste design tokens                                                       */
+/*                                                                             */
+/* Dark first, with a carefully tuned light theme. Everything is expressed as */
+/* a custom property so the palette can be re-skinned without touching the   */
+/* component styles.                                                          */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    'Roboto Mono', monospace;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  --dur-fast: 120ms;
+  --dur: 170ms;
+  --dur-slow: 220ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.25, 1);
+
+  --sidebar-w: 268px;
+  --titlebar-h: 46px;
+  --statusbar-h: 30px;
+
+  /* ---- dark palette (default) ------------------------------------------ */
+  --bg: #08080c;
+  --bg-2: #0c0c12;
+  --surface: #101018;
+  --surface-2: #15151f;
+  --surface-3: #1b1b27;
+  --surface-glass: rgba(255, 255, 255, 0.025);
+
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --border-accent: rgba(129, 140, 248, 0.4);
+
+  --text: #e9e9f2;
+  --text-dim: #a2a2b6;
+  --text-faint: #6c6c81;
+
+  --accent: #6366f1;
+  --accent-hi: #8b8df8;
+  --accent-soft: rgba(99, 102, 241, 0.16);
+  --accent-softer: rgba(99, 102, 241, 0.08);
+  --accent-glow: rgba(99, 102, 241, 0.4);
+
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, 0.14);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.14);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --info: #60a5fa;
+
+  --json-key: #c4b5fd;
+  --json-string: #86efac;
+  --json-number: #fbbf24;
+  --json-boolean: #60a5fa;
+  --json-null: #f472b6;
+  --json-punct: #7c7c96;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px -6px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 60px -18px rgba(0, 0, 0, 0.75), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --shadow-accent: 0 0 0 1px var(--border-accent), 0 8px 26px -10px var(--accent-glow);
+
+  --app-gradient: radial-gradient(
+      1100px 620px at 12% -12%,
+      rgba(99, 102, 241, 0.12),
+      transparent 62%
+    ),
+    radial-gradient(900px 520px at 96% 0%, rgba(129, 140, 248, 0.07), transparent 58%);
+}
+
+[data-theme='light'] {
+  --bg: #f4f4f8;
+  --bg-2: #ececf3;
+  --surface: #ffffff;
+  --surface-2: #f7f7fb;
+  --surface-3: #eeeef5;
+  --surface-glass: rgba(15, 15, 30, 0.015);
+
+  --border: rgba(15, 15, 35, 0.09);
+  --border-strong: rgba(15, 15, 35, 0.16);
+  --border-accent: rgba(99, 102, 241, 0.45);
+
+  --text: #191922;
+  --text-dim: #55556c;
+  --text-faint: #85859b;
+
+  --accent: #5457e5;
+  --accent-hi: #4346d6;
+  --accent-soft: rgba(84, 87, 229, 0.11);
+  --accent-softer: rgba(84, 87, 229, 0.06);
+  --accent-glow: rgba(84, 87, 229, 0.28);
+
+  --ok: #0f9d6a;
+  --ok-soft: rgba(15, 157, 106, 0.12);
+  --warn: #b7791f;
+  --warn-soft: rgba(183, 121, 31, 0.13);
+  --danger: #d1443f;
+  --danger-soft: rgba(209, 68, 63, 0.12);
+  --info: #2563eb;
+
+  --json-key: #7c3aed;
+  --json-string: #047857;
+  --json-number: #b45309;
+  --json-boolean: #1d4ed8;
+  --json-null: #be185d;
+  --json-punct: #6b6b80;
+
+  --shadow-sm: 0 1px 2px rgba(20, 20, 50, 0.06);
+  --shadow-md: 0 8px 20px -8px rgba(20, 20, 50, 0.16), 0 2px 5px rgba(20, 20, 50, 0.06);
+  --shadow-lg: 0 26px 60px -20px rgba(20, 20, 50, 0.24), 0 10px 26px -14px rgba(20, 20, 50, 0.16);
+  --shadow-accent: 0 0 0 1px var(--border-accent), 0 8px 24px -12px var(--accent-glow);
+
+  --app-gradient: radial-gradient(
+      1100px 620px at 12% -12%,
+      rgba(99, 102, 241, 0.09),
+      transparent 62%
+    ),
+    radial-gradient(900px 520px at 96% 0%, rgba(99, 102, 241, 0.05), transparent 58%);
+}

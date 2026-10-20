@@ -1,0 +1,37 @@
+{
+  "activeProvider": "ollama",
+  "outputDir": "~/Documents/Celeste",
+  "dataDir": "~/.celeste/data",
+  "bridgePort": 9223,
+  "browserTimeoutMs": 30000,
+  "maxSteps": 40,
+  "providers": [
+    {
+      "id": "ollama",
+      "kind": "ollama",
+      "label": "Ollama (local)",
+      "baseUrl": "http://localhost:11434",
+      "model": "qwen2.5:7b",
+      "supportsTools": true
+    },
+    {
+      "id": "openrouter",
+      "kind": "openai-compatible",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "anthropic/claude-sonnet-4.5",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "my-local-proxy",
+      "kind": "openai-compatible",
+      "label": "My Local Proxy",
+      "baseUrl": "http://localhost:8000/v1",
+      "model": "my-model",
+      "apiKeyEnv": "MY_PROXY_KEY",
+      "supportsTools": true
+    }
+  ]
+}

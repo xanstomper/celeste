@@ -1,0 +1,36 @@
+{
+  "name": "@celeste/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Celeste command line interface.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "celeste": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@celeste/core": "workspace:*",
+    "@celeste/documents": "workspace:*",
+    "@celeste/gateway": "workspace:*",
+    "@celeste/protocol": "workspace:*",
+    "@celeste/tools": "workspace:*",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

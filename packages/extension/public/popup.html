@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Celeste</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <span class="logo" aria-hidden="true"></span>
+      <div class="header-text">
+        <h1>Celeste</h1>
+        <p class="subtitle">browser agent bridge</p>
+      </div>
+      <span id="status-dot" class="dot" data-state="idle" title="Connection state"></span>
+    </header>
+
+    <section class="status" aria-live="polite">
+      <span id="status-text" class="status-text">Idle</span>
+      <code id="status-detail" class="detail"></code>
+    </section>
+
+    <section class="tab">
+      <img id="tab-favicon" class="favicon" alt="" hidden />
+      <div class="tab-text">
+        <span id="tab-title" class="tab-title">No active tab</span>
+        <span id="tab-url" class="tab-url"></span>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="ping" type="button" class="primary">Ping daemon</button>
+      <div class="port-row">
+        <label for="port">Bridge port</label>
+        <input id="port" type="number" min="1" max="65535" step="1" value="9223" inputmode="numeric" />
+        <button id="save-port" type="button">Save</button>
+      </div>
+      <p id="ping-result" class="result" data-state="idle"></p>
+    </section>
+
+    <footer class="footer">ws://127.0.0.1:&lt;port&gt;/extension</footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

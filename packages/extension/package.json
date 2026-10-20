@@ -1,0 +1,23 @@
+{
+  "name": "@celeste/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Celeste browser extension (Manifest V3) — drives Brave/Chromium.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "icons": "node scripts/gen-icons.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@celeste/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+celeste-data/
+.artifacts/
