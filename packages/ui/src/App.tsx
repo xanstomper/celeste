@@ -37,6 +37,7 @@ function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [composerMode, setComposerMode] = useState<'reply' | 'new'>('reply');
   const [focus, setFocus] = useState<SearchFocus>('web');
+  const [research, setResearch] = useState(false);
   const [focusComposerToken, setFocusComposerToken] = useState(0);
   const narrow = useMediaQuery('(max-width: 900px)');
   const [sidebarOpen, setSidebarOpen] = useState(!narrow);
@@ -104,13 +105,13 @@ function Workspace() {
   const handleSend = useCallback(
     async (content: string) => {
       if (composerMode === 'new' || !state.activeSessionId) {
-        await actions.createSession(content, focus);
+        await actions.createSession(content, focus, research ? 'research' : undefined);
         setComposerMode('reply');
         return;
       }
       await actions.sendMessage(content);
     },
-    [actions, composerMode, focus, state.activeSessionId],
+    [actions, composerMode, focus, research, state.activeSessionId],
   );
 
   const paletteActions = useMemo<PaletteAction[]>(
@@ -290,6 +291,8 @@ function Workspace() {
               onAutoApproveChange={(value) => actions.setSettings({ autoApprove: value })}
               focus={focus}
               onFocusChange={setFocus}
+              research={research}
+              onResearchChange={setResearch}
               onSend={handleSend}
               busy={state.busy}
               hasSession={state.activeSessionId !== null && composerMode === 'reply'}

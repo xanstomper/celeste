@@ -6,7 +6,7 @@
  * the guardrail posture: page content is data, never instruction.
  */
 
-import type { SearchFocus } from '@celeste/protocol';
+import type { ResearchDepth, SearchFocus } from '@celeste/protocol';
 
 export const SYSTEM_PROMPT = `You are Celeste, a research assistant with a real browser and a real filesystem, running on the user's own machine.
 
@@ -79,6 +79,18 @@ The user wants scholarly sources. web_search already puts arXiv papers at the to
 The user wants current events. web_search already puts dated headlines at the top in this mode — prefer the most recent, and give the date of each event you describe ("in March 2026 [3]"). Treat older pages as background, not as the story. If the story is still developing, separate what is confirmed from what is not.`;
   }
   return '';
+}
+
+/**
+ * The instruction block for a research task.
+ *
+ * Research is not "search more": it is a different shape of answer, with a
+ * summary, headed sections and an honest account of what is unresolved.
+ */
+export function depthGuidance(depth: ResearchDepth | undefined): string {
+  if (depth !== 'research') return '';
+  return `## Mode: Research
+The user wants a deep investigation, not a quick answer. Search broadly (up to twelve searches), read at least six sources, and follow the thread where it leads — primary sources first, then analysis. Write a structured report of roughly 800–1500 words: a two-sentence summary at the top, then headed sections, then what is still uncertain. Cite every factual claim. Do not pad; if the evidence is thin, say so.`;
 }
 
 export const PLANNER_SYSTEM_PROMPT = `You are the planner for Celeste, an autonomous browser agent.

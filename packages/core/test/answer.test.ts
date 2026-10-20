@@ -78,6 +78,32 @@ Galaxies formed earlier than expected [1].`;
     );
   });
 
+  it('starts at the heading when the preamble is a research receipt', () => {
+    const input = `I now have a comprehensive evidence base from primary studies (Leslie 2022 blood, Marfella 2024 NEJM cardiovascular) and systematic reviews, cross-referenced against the WHO 2022 report.
+
+Here is my research summary:
+
+---
+
+## Microplastics in the human body: what we know
+
+**Two-sentence summary.** Reliable evidence confirms that particles are present throughout the body [1].`;
+
+    expect(cleanAnswer(input)).toBe(
+      '## Microplastics in the human body: what we know\n\n**Two-sentence summary.** Reliable evidence confirms that particles are present throughout the body [1].',
+    );
+  });
+
+  it('keeps an opening paragraph that is not about the research', () => {
+    const input = `Dark energy makes up about 68% of the universe [1].
+
+## How the evidence developed
+
+Measurements of distant supernovae first suggested acceleration.`;
+
+    expect(cleanAnswer(input)).toBe(input);
+  });
+
   it('drops a "let me" line', () => {
     const input = `Let me summarise the findings.
 

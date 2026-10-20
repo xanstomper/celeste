@@ -83,11 +83,38 @@ function isResearchNote(paragraph: string, rest: string): boolean {
   return rest.trim().length > 0;
 }
 
+/**
+ * Drops everything before the first heading when the text in front of it is
+ * notes about the research rather than part of the answer.
+ *
+ * Research answers often open with a paragraph listing the papers the model
+ * read, then "Here is my research summary:", then the report. The heading is
+ * the real start; the paragraph is a receipt. Only stripped when the preamble
+ * is short and talks about the work in the first person, so a real opening
+ * paragraph survives.
+ */
+function stripBeforeFirstHeading(text: string): string {
+  const heading = /^#{1,6}\s/m.exec(text);
+  if (!heading || heading.index === 0) return text;
+
+  const before = text.slice(0, heading.index);
+  if (before.length > 900) return text;
+
+  const firstPerson = /\b(?:I|I've|I'm|my|we|we've)\b/i.test(before);
+  const researchy =
+    /\b(?:research|sources?|searches|searched|searching|evidence base|papers?|studies|read|gathered|synthesi[sz]e|summari[sz]e)\b/i.test(
+      before,
+    );
+
+  return firstPerson && researchy ? text.slice(heading.index) : text;
+}
+
 export function cleanAnswer(input: string): string {
   let text = input.trim();
 
   // Some models open with a rule even without a preamble.
   text = text.replace(/^-{3,}\s*\n+/, '').trim();
+  text = stripBeforeFirstHeading(text);
 
   // Models sometimes stack three of these before the answer starts.
   for (let pass = 0; pass < 4; pass++) {

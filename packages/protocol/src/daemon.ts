@@ -11,6 +11,7 @@ import type {
   ApprovalRequest,
   ChatMessage,
   PlanStep,
+  ResearchDepth,
   SearchFocus,
   Source,
   TaskState,
@@ -109,6 +110,8 @@ export interface CreateSessionRequest {
   prompt: string;
   /** Where to research: the open web, papers, or the news. */
   focus?: SearchFocus;
+  /** How deep to go: a quick answer, or a full research report. */
+  depth?: ResearchDepth;
   /** Optional override of the active provider for this session only. */
   providerId?: string;
   /** Approval policy for risky tools. */

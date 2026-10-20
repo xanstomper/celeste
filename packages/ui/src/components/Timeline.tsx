@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildCitations, collectSources } from '../lib/citations';
 import { formatClockTime } from '../lib/format';
@@ -37,6 +37,39 @@ function reduceMotion(): boolean {
  * Renders the folded `DaemonEvent` stream: chat bubbles, collapsible tool
  * cards, the live plan, approval gates, artifact drops and errors.
  */
+/**
+ * Copies an answer, and says so for a moment.
+ *
+ * Perplexity puts this under every answer because the first thing people do
+ * with research is paste it somewhere else.
+ */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(() => {
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1400);
+      })
+      .catch(() => undefined);
+  }, [text]);
+
+  return (
+    <button
+      type="button"
+      className="bubble__copy"
+      onClick={copy}
+      title="Copy answer"
+      aria-label="Copy answer"
+    >
+      <Icon name={copied ? 'check' : 'copy'} size={11} />
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 export function Timeline({
   items,
   sessionId,
@@ -162,6 +195,7 @@ export function Timeline({
                   <time className="bubble__time" dateTime={new Date(item.at).toISOString()}>
                     {formatClockTime(item.at)}
                   </time>
+                  {!isUser && item.text.trim() ? <CopyButton text={item.text} /> : null}
                 </div>
                 {cites.refs.length > 0 && item.id === lastAnswerId ? (
                   <SourcesRow refs={cites.refs} />

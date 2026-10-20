@@ -231,7 +231,8 @@ export class Daemon {
 
     // Only the modes we know how to research; anything else is the open web.
     const focus = body.focus === 'academic' || body.focus === 'news' ? body.focus : undefined;
-    const task = this.options.store.create(prompt.slice(0, 120), focus);
+    const depth = body.depth === 'research' ? 'research' : undefined;
+    const task = this.options.store.create(prompt.slice(0, 120), focus, depth);
     this.options.store.appendMessage(task.id, { role: 'user', content: prompt });
     this.options.bus.publish({
       type: 'task.created',

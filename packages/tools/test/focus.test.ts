@@ -164,6 +164,47 @@ describe('web_search with a focus', () => {
     expect(browserCalls).toBe(5);
   });
 
+  it('lets a research task search twelve times', async () => {
+    const registry = new ToolRegistry();
+    registry.registerAll(createSearchTools({ focusFeed: async () => [] }));
+    const ctx = makeContext('web');
+    // A research task: the depth is on the task, not on the call.
+    ctx.store = {
+      get: (id) =>
+        id === 'task_test'
+          ? ({
+              id: 'task_test',
+              title: 'test',
+              status: 'running',
+              depth: 'research',
+              plan: [],
+              messages: [],
+              scratch: {},
+              artifacts: [],
+              createdAt: 0,
+              updatedAt: 0,
+            } as never)
+          : undefined,
+    };
+
+    let calls = 0;
+    ctx.browser = {
+      isConnected: () => true,
+      send: async () => {
+        calls += 1;
+        return { engine: 'duckduckgo', query: 'q', url: 'https://duckduckgo.com', results: [] };
+      },
+    };
+
+    for (let index = 0; index < 12; index++) {
+      await registry.execute(call({ query: `query ${index}` }), ctx);
+    }
+    const thirteenth = await registry.execute(call({ query: 'one more' }), ctx);
+
+    expect(thirteenth.summary).toContain('budget');
+    expect(calls).toBe(12);
+  });
+
   it('leaves a plain web search untouched', async () => {
     const result = await registry([{ url: 'https://arxiv.org/abs/2401.1', title: 'A paper' }]).execute(
       call({ query: 'hubble' }),

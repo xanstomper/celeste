@@ -171,6 +171,15 @@ export type TaskStatus =
 export type SearchFocus = 'web' | 'academic' | 'news';
 
 /**
+ * How far a task should go.
+ *
+ * `quick` is the default: a handful of searches, an answer in the
+ * conversation. `research` is Perplexity's Research mode — many sources and
+ * a structured report.
+ */
+export type ResearchDepth = 'quick' | 'research';
+
+/**
  * A long-running unit of work. Checkpoints allow a task to resume after a
  * crash, a model switch, or a browser session reload.
  */
@@ -180,6 +189,8 @@ export interface TaskState {
   status: TaskStatus;
   /** Where this task researches. Absent means `web`. */
   focus?: SearchFocus;
+  /** How deep this task should go. Absent means `quick`. */
+  depth?: ResearchDepth;
   /** Ordered list of planned steps produced by the planner. */
   plan: PlanStep[];
   /** Transcript of the conversation so far. */

@@ -837,6 +837,30 @@ button {
   opacity: 0.75;
 }
 
+.bubble__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.bubble__copy:hover {
+  border-color: var(--border);
+  background: var(--surface-3);
+  color: var(--text);
+}
+
 /* tool cards --------------------------------------------------------------- */
 
 .tool-card {
@@ -1647,6 +1671,16 @@ button.provider:hover:not(:disabled) {
 }
 
 /* Focus modes: the three places research can look. */
+.composer__modes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.focus__chip--research {
+  margin-left: auto;
+}
+
 .focus {
   display: flex;
   align-items: center;

@@ -13,6 +13,7 @@ import { assessRisk, buildInjectionWarning, neutraliseUntrustedText } from './gu
 import {
   buildTurnContext,
   COMPACT_SYSTEM_PROMPT,
+  depthGuidance,
   focusGuidance,
   PLANNER_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
@@ -548,7 +549,9 @@ export class Agent {
       outputDir: this.options.outputDir,
     });
 
-    const guidance = focusGuidance(task.focus);
+    const guidance = [focusGuidance(task.focus), depthGuidance(task.depth)]
+      .filter(Boolean)
+      .join('\n\n');
     const messages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...(guidance ? [{ role: 'system' as const, content: guidance }] : []),

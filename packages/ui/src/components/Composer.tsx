@@ -15,6 +15,9 @@ export interface ComposerProps {
   /** Where a new task should research. */
   focus?: SearchFocus;
   onFocusChange?: (focus: SearchFocus) => void;
+  /** Whether a new task should dig deeper and write a report. */
+  research?: boolean;
+  onResearchChange?: (value: boolean) => void;
   onSend: (content: string) => void | Promise<void>;
   busy?: boolean;
   hasSession: boolean;
@@ -42,6 +45,8 @@ export function Composer({
   onAutoApproveChange,
   focus = 'web',
   onFocusChange,
+  research = false,
+  onResearchChange,
   onSend,
   busy = false,
   hasSession,
@@ -87,7 +92,23 @@ export function Composer({
   return (
     <div className="composer">
       {startingNew && onFocusChange ? (
-        <FocusPicker value={focus} onChange={onFocusChange} disabled={busy} />
+        <div className="composer__modes">
+          <FocusPicker value={focus} onChange={onFocusChange} disabled={busy} />
+          {onResearchChange ? (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={research}
+              className={`focus__chip focus__chip--research${research ? ' focus__chip--active' : ''}`}
+              onClick={() => onResearchChange(!research)}
+              disabled={busy}
+              title="Dig through many sources and write a structured report"
+            >
+              <Icon name="sparkle" size={13} />
+              <span>Research</span>
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="composer__shell">

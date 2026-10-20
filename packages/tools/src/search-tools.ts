@@ -26,6 +26,9 @@ const SEARCH_COUNT_KEY = 'celeste.web.searches';
  */
 const MAX_SEARCHES = 5;
 
+/** A research task is allowed to keep digging. */
+const MAX_RESEARCH_SEARCHES = 12;
+
 function def(
   name: string,
   description: string,
@@ -158,16 +161,19 @@ export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[
       }
 
       // Research has to end. Without a cap the agent keeps rephrasing the
-      // same query and never writes the answer.
+      // same query and never writes the answer. A research task earns a
+      // larger budget because depth is the point of it.
+      const task = ctx.store.get(ctx.taskId);
+      const maxSearches = task?.depth === 'research' ? MAX_RESEARCH_SEARCHES : MAX_SEARCHES;
       const searches = ctx.scratch.get<number>(SEARCH_COUNT_KEY) ?? 0;
-      if (searches >= MAX_SEARCHES) {
+      if (searches >= maxSearches) {
         const known = allSources(ctx.scratch);
         return {
           ok: true,
-          summary: `Search budget reached (${MAX_SEARCHES})`,
+          summary: `Search budget reached (${maxSearches})`,
           data: { budgetExhausted: true, results: known },
           text:
-            `You have already searched ${MAX_SEARCHES} times. Do not search again. ` +
+            `You have already searched ${maxSearches} times. Do not search again. ` +
             `Answer now using the ${known.length} sources you have` +
             (known.length > 0 ? ` (numbered [1] to [${known.length}])` : '') +
             '. If they do not answer the question, say plainly what is missing.',
