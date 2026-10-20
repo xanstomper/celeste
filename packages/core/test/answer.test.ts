@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanAnswer } from '../src/agent/answer.js';
+import { cleanAnswer, stripCanvasEcho } from '../src/agent/answer.js';
 
 describe('cleanAnswer', () => {
   it('drops a preamble and the rule that follows it', () => {
@@ -127,5 +127,27 @@ The ring is brighter on one side.`;
   it('keeps the text when the preamble is all there is', () => {
     const input = 'I have what I need.';
     expect(cleanAnswer(input)).toBe(input);
+  });
+});
+
+
+describe('stripCanvasEcho', () => {
+  const canvas = { kind: 'visual' as const, content: '<html></html>' };
+
+  it('drops a giant code block that repeats the canvas', () => {
+    const block = 'x'.repeat(500);
+    const input = `The dashboard is in the canvas.\n\n\`\`\`html\n${block}\n\`\`\`\n`;
+    expect(stripCanvasEcho(input, canvas)).toBe('The dashboard is in the canvas.');
+  });
+
+  it('keeps short code snippets', () => {
+    const input = 'Try this:\n\n```js\nconst x = 1;\n```';
+    expect(stripCanvasEcho(input, canvas)).toBe(input);
+  });
+
+  it('ignores image canvases', () => {
+    const block = 'x'.repeat(500);
+    const input = `\`\`\`\n${block}\n\`\`\``;
+    expect(stripCanvasEcho(input, { kind: 'image', content: 'https://example.com/x.png' })).toBe(input);
   });
 });

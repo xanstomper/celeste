@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Artifact, ChatMessage, PlanStep, TaskState } from '@celeste/protocol';
+import type { Artifact, BrowserActionInfo, CanvasState, ChatMessage, PlanStep, TaskState } from '@celeste/protocol';
 import { createId } from '@celeste/protocol';
 
 /**
@@ -76,6 +76,23 @@ export class TaskStore {
   setPlan(id: string, plan: PlanStep[]): void {
     this.update(id, (task) => {
       task.plan = plan;
+    });
+  }
+
+  /** Creates or replaces the task's canvas. */
+  setCanvas(id: string, canvas: CanvasState): void {
+    this.update(id, (task) => {
+      task.canvas = canvas;
+    });
+  }
+
+  /** Records a browser action and updates the active browser viewport state. */
+  setBrowserAction(id: string, action: BrowserActionInfo): void {
+    this.update(id, (task) => {
+      task.activeBrowser = action;
+      if (!task.browserHistory) task.browserHistory = [];
+      task.browserHistory.push(action);
+      if (task.browserHistory.length > 50) task.browserHistory.shift();
     });
   }
 

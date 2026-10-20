@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { API_ROUTES } from '@celeste/protocol';
 import type {
   ApprovalResponseRequest,
+  Attachment,
   ChatMessage,
   CreateSessionRequest,
   DaemonEvent,
@@ -79,6 +80,13 @@ export class Daemon {
       socket.on('close', unsubscribe);
       socket.on('error', unsubscribe);
     });
+
+    // Mirror browser actions into task store for persistence
+    this.options.bus.subscribe((event) => {
+      if (event.type === 'task.browser.action') {
+        this.options.store.setBrowserAction?.(event.taskId, event.action);
+      }
+    });
   }
 
   async stop(): Promise<void> {
@@ -143,6 +151,85 @@ export class Daemon {
         return this.sendJson(res, 200, { artifacts });
       }
 
+      if (route === API_ROUTES.browserStatus && method === 'GET') {
+        const connected = this.options.bridge.isConnected;
+        let activeTab: unknown = null;
+        if (connected) {
+          try {
+            activeTab = await this.options.bridge.send('ping', {}, { timeoutMs: 3000 });
+          } catch {
+            /* ignore */
+          }
+        }
+        return this.sendJson(res, 200, {
+          connected,
+          activeTab,
+          info: this.options.bridge.info,
+        });
+      }
+
+      if (route === API_ROUTES.browserScreenshot && method === 'GET') {
+        if (!this.options.bridge.isConnected) {
+          return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
+        }
+        try {
+          const shot = await this.options.bridge.send<{ data?: string; mimeType?: string }>(
+            'screenshot',
+            { format: 'jpeg' },
+            { timeoutMs: 6000 },
+          );
+          return this.sendJson(res, 200, {
+            data: shot?.data ?? null,
+            mimeType: shot?.mimeType ?? 'image/jpeg',
+          });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      if (route === API_ROUTES.browserNavigate && method === 'POST') {
+        if (!this.options.bridge.isConnected) {
+          return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
+        }
+        const body = (await readJson<{ url?: string }>(req)) ?? {};
+        const url = String(body.url ?? '').trim();
+        if (!url) return this.sendError(res, 400, 'INVALID_ARGS', 'url is required.');
+        try {
+          const nav = await this.options.bridge.send('navigate', { url }, { timeoutMs: 15000 });
+          return this.sendJson(res, 200, { ok: true, result: nav });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      if (route === API_ROUTES.browserSnapshot && method === 'POST') {
+        if (!this.options.bridge.isConnected) {
+          return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
+        }
+        try {
+          const snap = await this.options.bridge.send(
+            'snapshot',
+            { maxElements: 200, includeText: true },
+            { timeoutMs: 8000 },
+          );
+          return this.sendJson(res, 200, { ok: true, snapshot: snap });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      if (route === API_ROUTES.browserTabs && method === 'GET') {
+        if (!this.options.bridge.isConnected) {
+          return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
+        }
+        try {
+          const tabs = await this.options.bridge.send('tabs', { action: 'list' }, { timeoutMs: 5000 });
+          return this.sendJson(res, 200, { ok: true, tabs });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
       // /api/sessions/:id/...
       const sessionMatch = /^\/api\/sessions\/([^/]+)(?:\/(events|approve|cancel|message))?$/.exec(route);
       if (sessionMatch) {
@@ -175,20 +262,49 @@ export class Daemon {
         }
 
         if (action === 'message' && method === 'POST') {
-          const body = (await readJson<{ content?: string; providerId?: string; autoApprove?: boolean }>(
-            req,
-          )) ?? {};
-          const content = String(body.content ?? '').trim();
-          if (!content) return this.sendError(res, 400, 'INVALID_ARGS', 'content is required.');
+          const body =
+            (await readJson<{
+              content?: string;
+              providerId?: string;
+              autoApprove?: boolean;
+              attachments?: Attachment[];
+            }>(req)) ?? {};
+          const rawContent = String(body.content ?? '').trim();
+          const attachments = (body.attachments ?? [])
+            .filter(
+              (a) =>
+                a &&
+                typeof a.data === 'string' &&
+                a.data.length > 0 &&
+                typeof a.mimeType === 'string' &&
+                a.mimeType.startsWith('image/'),
+            )
+            .slice(0, 6);
+          if (!rawContent && attachments.length === 0) {
+            return this.sendError(res, 400, 'INVALID_ARGS', 'content is required.');
+          }
 
           const existing = this.options.store.get(id);
           if (!existing) return this.sendError(res, 404, 'NOT_FOUND', `No session ${id}.`);
 
-          this.options.store.appendMessage(id, { role: 'user', content });
+          const content = rawContent || 'Describe this image.';
+          const messageContent: ChatMessage['content'] =
+            attachments.length > 0
+              ? [
+                  { type: 'text' as const, text: content },
+                  ...attachments.map((a) => ({
+                    type: 'image' as const,
+                    data: a.data,
+                    mimeType: a.mimeType,
+                  })),
+                ]
+              : content;
+
+          this.options.store.appendMessage(id, { role: 'user', content: messageContent });
           this.options.bus.publish({
             type: 'task.message',
             taskId: id,
-            message: { role: 'user', content },
+            message: { role: 'user', content: messageContent },
             at: Date.now(),
           });
 
@@ -226,14 +342,41 @@ export class Daemon {
   /* ---------------------------------------------------------------------- */
 
   private async createSession(body: CreateSessionRequest) {
-    const prompt = String(body.prompt ?? '').trim();
-    if (!prompt) throw new Error('A prompt is required.');
+    const rawPrompt = String(body.prompt ?? '').trim();
+
+    // Images ride along as content parts; only real images, and only a few.
+    const attachments = (body.attachments ?? [])
+      .filter(
+        (a) =>
+          a &&
+          typeof a.data === 'string' &&
+          a.data.length > 0 &&
+          typeof a.mimeType === 'string' &&
+          a.mimeType.startsWith('image/'),
+      )
+      .slice(0, 6);
+    if (!rawPrompt && attachments.length === 0) throw new Error('A prompt is required.');
+
+    const prompt = rawPrompt || 'Describe this image.';
 
     // Only the modes we know how to research; anything else is the open web.
     const focus = body.focus === 'academic' || body.focus === 'news' ? body.focus : undefined;
     const depth = body.depth === 'research' ? 'research' : undefined;
     const task = this.options.store.create(prompt.slice(0, 120), focus, depth);
-    this.options.store.appendMessage(task.id, { role: 'user', content: prompt });
+    this.options.store.appendMessage(task.id, {
+      role: 'user',
+      content:
+        attachments.length > 0
+          ? [
+              { type: 'text' as const, text: prompt },
+              ...attachments.map((a) => ({
+                type: 'image' as const,
+                data: a.data,
+                mimeType: a.mimeType,
+              })),
+            ]
+          : prompt,
+    });
     this.options.bus.publish({
       type: 'task.created',
       taskId: task.id,
@@ -396,6 +539,7 @@ ${messageText(answer).slice(0, 4000)}`,
       baseUrl: p.baseUrl ?? null,
       active: p.id === activeId,
       hasKey: Boolean(p.apiKey || (p.apiKeyEnv && process.env[p.apiKeyEnv])),
+      supportsVision: p.supportsVision,
       source: p.source,
     }));
   }

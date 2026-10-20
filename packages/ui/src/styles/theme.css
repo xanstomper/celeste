@@ -35,20 +35,20 @@
   --font-tiny: 11px;
 
   /* ---- light palette (default) ------------------------------------------ */
-  --bg: #ffffff;
-  --bg-2: #fbfbfc;
-  --surface: #f7f7f8;
+  --bg: #fcfcf9;
+  --bg-2: #f7f7f2;
+  --surface: #f3f3ee;
   --surface-2: #ffffff;
-  --surface-3: #eeeef1;
-  --surface-glass: rgba(0, 0, 0, 0.015);
+  --surface-3: #ecece6;
+  --surface-glass: rgba(19, 52, 59, 0.02);
 
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
+  --border: #e8e8e3;
+  --border-strong: #d9d9d2;
   --border-accent: rgba(29, 122, 140, 0.38);
 
-  --text: #1c1c1e;
-  --text-dim: #6b6b70;
-  --text-faint: #76767f;
+  --text: #13343b;
+  --text-dim: #5f6b6d;
+  --text-faint: #7c8789;
 
   --accent: #20808d;
   --accent-hi: #1d7a8c;

@@ -107,31 +107,56 @@ export class ModelGateway {
         }
       : request;
 
-    try {
-      return await primary.chat(tracked);
-    } catch (err) {
-      // An upstream outage can surface as anything from a 404 ("no
-      // candidates") to a 502. Only a request the provider rejected as
-      // malformed is worth giving up on: another provider would reject it
-      // the same way.
-      const malformed = err instanceof ProviderError && (err.status === 400 || err.status === 422);
-      if (malformed || streamed || request.signal?.aborted) throw err;
+    // Free tiers enforce concurrency, not just rate: two tasks at once and
+    // every request comes back 429. That is transient, so ride it out for a
+    // few seconds before telling the reader to try again.
+    const deadline = Date.now() + 30_000;
+    let wait = 4_000;
 
-      const alternatives = this.listProviders().filter(
-        (cfg) => cfg.id !== primary.config.id,
-      );
-      if (alternatives.length === 0) throw err;
+    for (;;) {
+      const errors: unknown[] = [];
 
-      let lastError: unknown = err;
+      try {
+        return await primary.chat(tracked);
+      } catch (err) {
+        const malformed =
+          err instanceof ProviderError && (err.status === 400 || err.status === 422);
+        if (malformed || streamed || request.signal?.aborted) throw err;
+        errors.push(err);
+      }
+
+      const alternatives = this.listProviders().filter((cfg) => cfg.id !== primary.config.id);
       for (const cfg of alternatives) {
-        if (request.signal?.aborted) throw lastError;
+        if (request.signal?.aborted) throw errors.at(-1);
         try {
           return await this.getProvider(cfg.id).chat(tracked);
         } catch (next) {
-          lastError = next;
+          const malformed =
+            next instanceof ProviderError && (next.status === 400 || next.status === 422);
+          if (malformed || streamed) throw next;
+          errors.push(next);
         }
       }
-      throw lastError;
+
+      const allBusy =
+        errors.length > 0 &&
+        errors.every((error) => error instanceof ProviderError && error.status === 429);
+
+      if (allBusy && Date.now() < deadline && !request.signal?.aborted) {
+        await delay(wait, request.signal);
+        wait = Math.min(wait * 2, 10_000);
+        continue;
+      }
+
+      if (allBusy) {
+        throw new ProviderError(
+          'gateway',
+          'Every free provider is at its concurrency limit right now. Nothing was lost — try again in a few seconds.',
+          { status: 429, retryable: true },
+        );
+      }
+
+      throw errors.at(-1);
     }
   }
 
@@ -192,4 +217,19 @@ export function normaliseProviderKind(input: string): ProviderKind {
     default:
       return 'openai-compatible';
   }
+}
+
+/** Waits, but wakes up immediately when the task is cancelled. */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new ProviderError('gateway', 'Cancelled', { status: 499, retryable: false }));
+      },
+      { once: true },
+    );
+  });
 }

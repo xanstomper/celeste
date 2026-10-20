@@ -1,5 +1,6 @@
 import type {
   Artifact,
+  CanvasState,
   DaemonEvent,
   TaskState,
   ToolCall,
@@ -51,8 +52,11 @@ export interface ToolContext {
   signal: AbortSignal;
   /** Event bus for streaming progress to the UI. */
   bus: { publish(event: DaemonEvent): void };
-  /** Access to the task store (read task state, artifacts). */
-  store: { get(id: string): TaskState | undefined };
+  /** Access to the task store (read task state, write the canvas). */
+  store: {
+    get(id: string): TaskState | undefined;
+    setCanvas?(id: string, canvas: CanvasState): void;
+  };
   /** The browser, for tools that drive it directly (search, reading). */
   browser?: BrowserClient;
   /** Per-task scratchpad. */

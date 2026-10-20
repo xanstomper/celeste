@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TaskState, ToolResult } from '@celeste/protocol';
 import { buildCitations, citedNumbers, collectSources } from '../src/lib/citations';
 import {
+  applyEventToTask,
   buildTimeline,
   buildTimelineFromTask,
   mergeTimeline,
@@ -234,5 +235,113 @@ describe('streaming', () => {
     const previews = items.filter((item) => item.kind === 'streaming');
     expect(previews).toHaveLength(1);
     expect(previews[0]?.kind === 'streaming' ? previews[0].text : '').toBe('Second');
+  });
+});
+
+
+describe('canvas', () => {
+  const canvas = {
+    id: 'canvas_t',
+    kind: 'visual' as const,
+    title: 'Chart',
+    content: '<h1>x</h1>',
+    updatedAt: 5,
+  };
+
+  it('folds a canvas event into one card', () => {
+    const items = buildTimeline([{ type: 'task.canvas', taskId: 't', canvas, at: 5 }]);
+    expect(items.filter((item) => item.kind === 'canvas')).toHaveLength(1);
+  });
+
+  it('updates the card in place rather than stacking them', () => {
+    const items = buildTimeline([
+      { type: 'task.canvas', taskId: 't', canvas, at: 5 },
+      {
+        type: 'task.canvas',
+        taskId: 't',
+        canvas: { ...canvas, title: 'Chart v2', updatedAt: 6 },
+        at: 6,
+      },
+    ]);
+
+    const cards = items.filter((item) => item.kind === 'canvas');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.kind === 'canvas' ? cards[0].canvas.title : '').toBe('Chart v2');
+  });
+
+  it('applies a canvas event to the task snapshot', () => {
+    const task = {
+      id: 't',
+      title: 'x',
+      status: 'running',
+      plan: [],
+      messages: [],
+      scratch: {},
+      artifacts: [],
+      createdAt: 0,
+      updatedAt: 0,
+    } as unknown as TaskState;
+
+    const next = applyEventToTask(task, { type: 'task.canvas', taskId: 't', canvas, at: 6 });
+    expect(next.canvas?.title).toBe('Chart');
+  });
+});
+
+describe('browser action', () => {
+  const action = {
+    id: 'act_1',
+    action: 'click' as const,
+    point: { x: 100, y: 200 },
+    ref: 'e14',
+    url: 'https://example.com',
+    at: 10,
+  };
+
+  it('folds a browser action event into the timeline', () => {
+    const items = buildTimeline([{ type: 'task.browser.action', taskId: 't', action, at: 10 }]);
+    expect(items.filter((item) => item.kind === 'browser')).toHaveLength(1);
+  });
+
+  it('records browser action into task state history', () => {
+    const task = {
+      id: 't',
+      title: 'x',
+      status: 'running',
+      plan: [],
+      messages: [],
+      scratch: {},
+      artifacts: [],
+      createdAt: 0,
+      updatedAt: 0,
+    } as unknown as TaskState;
+
+    const next = applyEventToTask(task, { type: 'task.browser.action', taskId: 't', action, at: 10 });
+    expect(next.activeBrowser?.action).toBe('click');
+    expect(next.browserHistory).toHaveLength(1);
+  });
+});
+
+
+describe('terminal dividers', () => {
+  it('does not stack two identical failure rows', () => {
+    const items = buildTimeline([
+      { type: 'task.done', taskId: 't', status: 'failed', at: 1 },
+      { type: 'task.done', taskId: 't', status: 'failed', at: 2 },
+    ]);
+    expect(items.filter((item) => item.kind === 'status')).toHaveLength(1);
+  });
+
+  it('keeps a failure divider above a later answer', () => {
+    const items = buildTimeline([
+      { type: 'task.done', taskId: 't', status: 'failed', at: 1 },
+      {
+        type: 'task.message',
+        taskId: 't',
+        message: { role: 'assistant', content: 'Recovered.' },
+        at: 2,
+      },
+    ]);
+    expect(items.filter((item) => item.kind === 'status')).toHaveLength(1);
+    expect(items.filter((item) => item.kind === 'message')).toHaveLength(1);
   });
 });

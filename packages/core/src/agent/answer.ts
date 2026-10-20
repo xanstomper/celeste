@@ -109,6 +109,30 @@ function stripBeforeFirstHeading(text: string): string {
   return firstPerson && researchy ? text.slice(heading.index) : text;
 }
 
+/**
+ * Drops a giant fenced code block that merely repeats a canvas.
+ *
+ * Models like to paste the whole HTML page into the answer even after the
+ * canvas tool has shown it. The canvas is the artifact; the chat should stay
+ * a conversation.
+ */
+export function stripCanvasEcho(
+  answer: string,
+  canvas?: { kind: 'document' | 'visual' | 'image' | 'project'; content: string },
+): string {
+  if (!canvas || (canvas.kind !== 'visual' && canvas.kind !== 'document')) return answer;
+
+  let removed = false;
+  const next = answer.replace(/```[\w-]*\n([\s\S]*?)```/g, (match, body: string) => {
+    if (body.length < 400) return match;
+    removed = true;
+    return '';
+  });
+
+  if (!removed) return answer;
+  return next.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function cleanAnswer(input: string): string {
   let text = input.trim();
 

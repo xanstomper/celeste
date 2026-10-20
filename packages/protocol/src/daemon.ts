@@ -9,6 +9,9 @@
 import type {
   Artifact,
   ApprovalRequest,
+  Attachment,
+  BrowserActionInfo,
+  CanvasState,
   ChatMessage,
   PlanStep,
   ResearchDepth,
@@ -73,6 +76,8 @@ export type DaemonEvent =
       suggestions: string[];
       at: number;
     }
+  | { type: 'task.canvas'; taskId: string; canvas: CanvasState; at: number }
+  | { type: 'task.browser.action'; taskId: string; action: BrowserActionInfo; at: number }
   | { type: 'extension.status'; connected: boolean; detail?: string; at: number }
   | { type: 'provider.changed'; providerId: string; model: string; at: number }
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string; at: number };
@@ -103,6 +108,8 @@ export interface ProviderSummary {
   active: boolean;
   /** True when an API key could be resolved. */
   hasKey: boolean;
+  /** True when the model can read images. */
+  supportsVision?: boolean;
   source?: string;
 }
 
@@ -112,6 +119,8 @@ export interface CreateSessionRequest {
   focus?: SearchFocus;
   /** How deep to go: a quick answer, or a full research report. */
   depth?: ResearchDepth;
+  /** Images to send with the first message. */
+  attachments?: Attachment[];
   /** Optional override of the active provider for this session only. */
   providerId?: string;
   /** Approval policy for risky tools. */
@@ -175,5 +184,10 @@ export const API_ROUTES = {
   sessionCancel: (id: string) => `/api/sessions/${id}/cancel`,
   sessionSend: (id: string) => `/api/sessions/${id}/message`,
   artifacts: '/api/artifacts',
+  browserStatus: '/api/browser/status',
+  browserScreenshot: '/api/browser/screenshot',
+  browserNavigate: '/api/browser/navigate',
+  browserSnapshot: '/api/browser/snapshot',
+  browserTabs: '/api/browser/tabs',
   websocket: '/ws',
 } as const;

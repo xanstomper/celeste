@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { ProviderSummary } from '@celeste/protocol';
 
@@ -14,6 +14,14 @@ export interface ProviderPickerProps {
 }
 
 function providerKeyBadge(provider: ProviderSummary) {
+  if (provider.id === 'pollinations') {
+    return (
+      <span className="chip chip--ok" title="No account or key needed">
+        <Icon name="sparkle" size={10} />
+        keyless
+      </span>
+    );
+  }
   if (provider.hasKey) {
     return (
       <span className="chip chip--ok" title="An API key was resolved for this provider">
@@ -51,6 +59,12 @@ function ProviderRow({
           {provider.label}
         </span>
         {providerKeyBadge(provider)}
+        {provider.supportsVision ? (
+          <span className="chip chip--ok" title="This model can read images">
+            <Icon name="image" size={10} />
+            vision
+          </span>
+        ) : null}
       </span>
       <span className="provider__meta">
         <span className="provider__kind">{provider.kind}</span>
@@ -118,6 +132,22 @@ export function ProviderPicker({
 
   const active = providers.find((provider) => provider.id === activeId) ?? null;
 
+  // Show models that can actually answer: a resolved key, a keyless
+  // provider, or a local runtime. Unconfigured cloud providers are noise in
+  // a side panel.
+  const usable = useMemo(
+    () =>
+      providers.filter(
+        (provider) =>
+          provider.hasKey ||
+          provider.id === 'pollinations' ||
+          provider.kind === 'ollama' ||
+          provider.kind === 'lmstudio' ||
+          provider.kind === 'llamacpp',
+      ),
+    [providers],
+  );
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
@@ -130,9 +160,9 @@ export function ProviderPicker({
 
   useEffect(() => {
     if (!open) return;
-    const index = providers.findIndex((provider) => provider.id === activeId);
+    const index = usable.findIndex((provider) => provider.id === activeId);
     setActiveIndex(index >= 0 ? index : 0);
-  }, [open, providers, activeId]);
+  }, [open, usable, activeId]);
 
   useEffect(() => {
     if (!open) return;
@@ -143,8 +173,8 @@ export function ProviderPicker({
   if (variant === 'panel') {
     return (
       <div className="provider-list" role="list" aria-label={label}>
-        {providers.length === 0 ? <p className="provider-list__empty">No providers available.</p> : null}
-        {providers.map((provider) => (
+        {usable.length === 0 ? <p className="provider-list__empty">No providers available.</p> : null}
+        {usable.map((provider) => (
           <ProviderRow
             key={provider.id}
             provider={provider}
@@ -173,13 +203,13 @@ export function ProviderPicker({
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveIndex((index) => (providers.length === 0 ? 0 : (index + 1) % providers.length));
+      setActiveIndex((index) => (usable.length === 0 ? 0 : (index + 1) % usable.length));
       return;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
       setActiveIndex((index) =>
-        providers.length === 0 ? 0 : (index - 1 + providers.length) % providers.length,
+        usable.length === 0 ? 0 : (index - 1 + usable.length) % usable.length,
       );
       return;
     }
@@ -190,7 +220,7 @@ export function ProviderPicker({
     }
     if (event.key === 'End') {
       event.preventDefault();
-      setActiveIndex(Math.max(0, providers.length - 1));
+      setActiveIndex(Math.max(0, usable.length - 1));
       return;
     }
     if (event.key === 'Tab') {
@@ -221,10 +251,10 @@ export function ProviderPicker({
 
       {open ? (
         <div className="provider-picker__menu" role="menu" aria-label={label}>
-          {providers.length === 0 ? (
+          {usable.length === 0 ? (
             <p className="provider-list__empty">No providers available.</p>
           ) : null}
-          {providers.map((provider, index) => (
+          {usable.map((provider, index) => (
             <button
               type="button"
               role="menuitem"

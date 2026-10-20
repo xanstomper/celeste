@@ -32,6 +32,75 @@
       "model": "my-model",
       "apiKeyEnv": "MY_PROXY_KEY",
       "supportsTools": true
+    },
+    {
+      "id": "silkroute",
+      "kind": "openai-compatible",
+      "label": "SilkRoute (local free router)",
+      "baseUrl": "http://localhost:8760/v1",
+      "model": "sr-fast",
+      "apiKeyEnv": "SILKROUTE_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "freeinference",
+      "kind": "openai-compatible",
+      "label": "FreeInference.org",
+      "baseUrl": "https://freeinference.org/v1",
+      "model": "deepseek-v4-flash",
+      "apiKeyEnv": "FREEINFERENCE_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "freeinference-glm",
+      "kind": "openai-compatible",
+      "label": "GLM-5.3 Flash (free)",
+      "baseUrl": "https://freeinference.org/v1",
+      "model": "glm-5.3-flash",
+      "apiKeyEnv": "FREEINFERENCE_API_KEY",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "freeinference-minimax",
+      "kind": "openai-compatible",
+      "label": "MiniMax M3 (free)",
+      "baseUrl": "https://freeinference.org/v1",
+      "model": "minimax-m3",
+      "apiKeyEnv": "FREEINFERENCE_API_KEY",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "freeinference-qwen",
+      "kind": "openai-compatible",
+      "label": "Qwen3.6 35B (free)",
+      "baseUrl": "https://freeinference.org/v1",
+      "model": "qwen3.6-35b",
+      "apiKeyEnv": "FREEINFERENCE_API_KEY",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "freeinference-diffusion",
+      "kind": "openai-compatible",
+      "label": "DiffusionGemma (free)",
+      "baseUrl": "https://freeinference.org/v1",
+      "model": "diffusiongemma",
+      "apiKeyEnv": "FREEINFERENCE_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "pollinations",
+      "kind": "openai-compatible",
+      "label": "Pollinations (no signup)",
+      "baseUrl": "https://text.pollinations.ai/openai/v1",
+      "model": "openai-fast",
+      "supportsTools": true,
+      "supportsVision": false
     }
   ]
 }

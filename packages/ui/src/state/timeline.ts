@@ -9,9 +9,13 @@
 import type {
   Artifact,
   ApprovalRequest,
+  BrowserActionInfo,
+  BrowserElementInfo,
+  CanvasState,
   ChatMessage,
   ContentPart,
   DaemonEvent,
+  ImagePart,
   PlanStep,
   Role,
   Source,
@@ -33,6 +37,18 @@ export interface MessageTimelineItem {
   /** Provider bookkeeping (e.g. the model id) shown as a small badge. */
   name: string | undefined;
   toolCalls: ToolCall[] | undefined;
+  /** Images the user attached to this message. */
+  images?: ImagePart[];
+}
+
+/**
+ * A workspace the agent built: report, visual page, image or project.
+ */
+export interface CanvasTimelineItem {
+  kind: 'canvas';
+  id: string;
+  at: number;
+  canvas: CanvasState;
 }
 
 /**
@@ -117,9 +133,18 @@ export interface StatusTimelineItem {
   label: string;
 }
 
+export interface BrowserTimelineItem {
+  kind: 'browser';
+  id: string;
+  at: number;
+  action: BrowserActionInfo;
+}
+
 export type TimelineItem =
   | MessageTimelineItem
   | StreamingTimelineItem
+  | CanvasTimelineItem
+  | BrowserTimelineItem
   | ToolTimelineItem
   | PlanTimelineItem
   | SuggestionsTimelineItem
@@ -138,6 +163,27 @@ function isContentPart(value: unknown): value is ContentPart {
 }
 
 /** Flattens the `string | ContentPart[]` content union into plain text. */
+function sameContent(a: ChatMessage['content'], b: ChatMessage['content']): boolean {
+  if (a === b) return true;
+  if (typeof a === 'string' || typeof b === 'string') return false;
+  if (a.length !== b.length) return false;
+  return a.every((part, index) => {
+    const other = b[index];
+    if (!other || part.type !== other.type) return false;
+    if (part.type === 'text') return other.type === 'text' && part.text === other.text;
+    return (
+      other.type === 'image' && part.data === other.data && part.mimeType === other.mimeType
+    );
+  });
+}
+
+/** The image parts of a message, if it has any. */
+export function imagesOf(message: ChatMessage): ImagePart[] {
+  return Array.isArray(message.content)
+    ? message.content.filter((part): part is ImagePart => part.type === 'image')
+    : [];
+}
+
 export function extractMessageText(message: ChatMessage): string {
   const { content } = message;
   if (typeof content === 'string') return content;
@@ -193,12 +239,26 @@ export function applyEventToTask(task: TaskState, event: DaemonEvent): TaskState
     case 'task.plan':
       return { ...task, plan: event.plan, updatedAt: at };
 
+    case 'task.canvas':
+      return { ...task, canvas: event.canvas, updatedAt: at };
+
+    case 'task.browser.action': {
+      const history = task.browserHistory ? [...task.browserHistory, event.action] : [event.action];
+      if (history.length > 50) history.shift();
+      return {
+        ...task,
+        activeBrowser: event.action,
+        browserHistory: history,
+        updatedAt: at,
+      };
+    }
+
     case 'task.message': {
       const incoming = event.message;
       const duplicate = task.messages.some(
         (message) =>
           message.role === incoming.role &&
-          message.content === incoming.content &&
+          sameContent(message.content, incoming.content) &&
           message.toolCallId === incoming.toolCallId,
       );
       const messages = duplicate ? task.messages : [...task.messages, incoming];
@@ -287,6 +347,7 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
   let planIndex = -1;
   let suggestionsIndex = -1;
   let streamIndex = -1;
+  let canvasIndex = -1;
 
   events.forEach((event, index) => {
     const key = `e${index}`;
@@ -342,6 +403,21 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
         return;
       }
 
+      case 'task.canvas': {
+        if (canvasIndex >= 0) {
+          items[canvasIndex] = {
+            kind: 'canvas',
+            id: key,
+            at: event.at,
+            canvas: event.canvas,
+          };
+          return;
+        }
+        canvasIndex = items.length;
+        items.push({ kind: 'canvas', id: key, at: event.at, canvas: event.canvas });
+        return;
+      }
+
       case 'task.delta': {
         if (streamIndex >= 0) {
           const existing = items[streamIndex];
@@ -370,6 +446,7 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
           text: extractMessageText(event.message),
           name: event.message.name,
           toolCalls: event.message.toolCalls,
+          images: imagesOf(event.message),
         });
         return;
       }
@@ -471,6 +548,16 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
         return;
       }
 
+      case 'task.browser.action': {
+        items.push({
+          kind: 'browser',
+          id: `browser-${event.action.id}`,
+          at: event.at,
+          action: event.action,
+        });
+        return;
+      }
+
       case 'task.done': {
         const status: TaskStatus =
           event.status === 'completed'
@@ -482,6 +569,14 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
         // A finished answer speaks for itself — the header already says
         // "completed". Only an abnormal ending is worth a divider.
         if (status === 'completed') return;
+
+        // A retried run can end twice with the same status; one divider is
+        // enough to mark the turn.
+        const previous = items[items.length - 1];
+        if (previous?.kind === 'status' && previous.status === status) {
+          items[items.length - 1] = { ...previous, at: event.at };
+          return;
+        }
 
         items.push({
           kind: 'status',
@@ -541,6 +636,7 @@ export function buildTimelineFromTask(task: TaskState): TimelineItem[] {
       text: extractMessageText(message),
       name: message.name,
       toolCalls: message.toolCalls,
+      images: imagesOf(message),
     });
   });
   task.artifacts.forEach((artifact, index) => {
@@ -551,6 +647,14 @@ export function buildTimelineFromTask(task: TaskState): TimelineItem[] {
       artifact,
     });
   });
+  if (task.canvas) {
+    items.push({
+      kind: 'canvas',
+      id: 'snapshot-canvas',
+      at: task.canvas.updatedAt,
+      canvas: task.canvas,
+    });
+  }
   if (task.suggestions && task.suggestions.length > 0) {
     items.push({
       kind: 'suggestions',

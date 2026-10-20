@@ -237,7 +237,8 @@ export class OpenAiCompatibleProvider implements ModelProvider {
 
     if (!res.ok) {
       const detail = this.extractError(res.text);
-      const retryAfterMs = parseRetryAfter(detail);
+      const concurrency = /concurrency_limit|too many concurrent/i.test(detail);
+      const retryAfterMs = parseRetryAfter(detail) ?? (concurrency ? 4_000 : undefined);
       const rateLimited = res.status === 402 || res.status === 429;
       throw new ProviderError(
         this.config.id,

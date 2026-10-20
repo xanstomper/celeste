@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import type { DaemonEvent, ResearchDepth, SearchFocus } from '@celeste/protocol';
+import type { Attachment, DaemonEvent, ResearchDepth, SearchFocus } from '@celeste/protocol';
 
 import { EventDeduper, useGlobalEvents, useSessionEvents } from '../api/events';
 import { readEnvApiBase, toApiError } from '../api/client';
@@ -162,8 +162,18 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'select', id });
   }, []);
 
+  /** Opens a blank thread: no active session, no events on screen. */
+  const newTask = useCallback(() => {
+    dispatch({ type: 'select', id: null });
+  }, []);
+
   const createSession = useCallback(
-    async (prompt: string, focus?: SearchFocus, depth?: ResearchDepth) => {
+    async (
+      prompt: string,
+      focus?: SearchFocus,
+      depth?: ResearchDepth,
+      attachments?: Attachment[],
+    ) => {
       const current = transportRef.current;
       if (!current) return;
       const trimmed = prompt.trim();
@@ -174,6 +184,7 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
           prompt: trimmed,
           ...(focus && focus !== 'web' ? { focus } : {}),
           ...(depth ? { depth } : {}),
+          ...(attachments?.length ? { attachments } : {}),
           autoApprove: stateRef.current.settings.autoApprove,
           outputDir: stateRef.current.settings.outputDir,
         });
@@ -186,7 +197,20 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
           event: {
             type: 'task.message',
             taskId: task.id,
-            message: { role: 'user', content: trimmed },
+            message: {
+              role: 'user',
+              content:
+                attachments && attachments.length > 0
+                  ? [
+                      { type: 'text' as const, text: trimmed },
+                      ...attachments.map((attachment) => ({
+                        type: 'image' as const,
+                        data: attachment.data,
+                        mimeType: attachment.mimeType,
+                      })),
+                    ]
+                  : trimmed,
+            },
             at: Date.now(),
           },
         });
@@ -202,18 +226,18 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: Attachment[]) => {
       const current = transportRef.current;
       const trimmed = content.trim();
-      if (!current || !trimmed) return;
+      if (!current || (!trimmed && !attachments?.length)) return;
       const sessionId = stateRef.current.activeSessionId;
       if (!sessionId) {
-        await createSession(trimmed);
+        await createSession(trimmed, undefined, undefined, attachments);
         return;
       }
       dispatch({ type: 'busy', busy: true });
       try {
-        await current.sendMessage(sessionId, trimmed);
+        await current.sendMessage(sessionId, trimmed, attachments);
       } catch (err) {
         notify('error', toApiError(err).message);
       } finally {
@@ -274,6 +298,30 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
     [notify],
   );
 
+  const navigateBrowser = useCallback(
+    async (url: string) => {
+      const current = transportRef.current;
+      if (!current) return;
+      try {
+        await current.navigateBrowser?.(url);
+      } catch (err) {
+        notify('error', `Navigation failed: ${toApiError(err).message}`);
+      }
+    },
+    [notify],
+  );
+
+  const captureScreenshot = useCallback(async () => {
+    const current = transportRef.current;
+    if (!current) return;
+    try {
+      const res = await current.getBrowserScreenshot?.();
+      return res?.data ?? undefined;
+    } catch (err) {
+      notify('error', `Screenshot failed: ${toApiError(err).message}`);
+    }
+  }, [notify]);
+
   const setSettings = useCallback((patch: Partial<Settings>) => {
     dispatch({ type: 'settings', patch });
   }, []);
@@ -319,11 +367,14 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<CelesteActions>(
     () => ({
       selectSession,
+      newTask,
       createSession,
       sendMessage,
       respondApproval,
       cancelTask,
       switchProvider,
+      navigateBrowser,
+      captureScreenshot,
       setSettings,
       setTheme,
       toggleDemoMode,
@@ -339,6 +390,8 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       respondApproval,
       cancelTask,
       switchProvider,
+      navigateBrowser,
+      captureScreenshot,
       setSettings,
       setTheme,
       toggleDemoMode,

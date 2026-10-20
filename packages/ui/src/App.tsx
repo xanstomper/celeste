@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SearchFocus } from '@celeste/protocol';
+import type { Attachment, SearchFocus } from '@celeste/protocol';
 
+import { BrowserWrapper } from './components/BrowserWrapper';
+import { CanvasPane } from './components/CanvasPane';
 import { CommandPalette } from './components/CommandPalette';
 import type { PaletteAction } from './components/CommandPalette';
 import { Composer } from './components/Composer';
@@ -38,6 +40,11 @@ function Workspace() {
   const [composerMode, setComposerMode] = useState<'reply' | 'new'>('reply');
   const [focus, setFocus] = useState<SearchFocus>('web');
   const [research, setResearch] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'browser' | 'canvas'>('chat');
+  const [splitView, setSplitView] = useState(false);
+  const [sidePane, setSidePane] = useState<'browser' | 'canvas'>('browser');
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const canvasSeenRef = useRef<string | null>(null);
   const [focusComposerToken, setFocusComposerToken] = useState(0);
   const narrow = useMediaQuery('(max-width: 900px)');
   const [sidebarOpen, setSidebarOpen] = useState(!narrow);
@@ -46,6 +53,29 @@ function Workspace() {
   useEffect(() => {
     setSidebarOpen(!narrow);
   }, [narrow]);
+
+  // A canvas that appears while the agent is working opens itself — that is
+  // the moment it is meant to be seen. Re-opening a thread later leaves the
+  // reader where they were.
+  const canvasId = activeTask?.canvas?.id ?? null;
+  useEffect(() => {
+    if (canvasId && canvasId !== canvasSeenRef.current && activeTask?.status === 'running') {
+      canvasSeenRef.current = canvasId;
+      setSidePane('canvas');
+      setSplitView(true);
+    }
+    if (!canvasId) canvasSeenRef.current = null;
+  }, [canvasId, activeTask?.status]);
+
+  const handleOpenBrowser = useCallback(() => {
+    setSidePane('browser');
+    setSplitView(true);
+  }, []);
+
+  const handleOpenCanvas = useCallback(() => {
+    setSidePane('canvas');
+    setSplitView(true);
+  }, []);
 
   /* Global keyboard shortcuts. */
   useEffect(() => {
@@ -96,20 +126,26 @@ function Workspace() {
   );
 
   const startNewTask = useCallback(() => {
+    actions.newTask();
     setComposerMode('new');
     setFocusComposerToken((token) => token + 1);
     const node = composerRef.current?.querySelector('textarea');
     node?.focus();
-  }, []);
+  }, [actions]);
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: Attachment[]) => {
       if (composerMode === 'new' || !state.activeSessionId) {
-        await actions.createSession(content, focus, research ? 'research' : undefined);
+        await actions.createSession(
+          content,
+          focus,
+          research ? 'research' : undefined,
+          attachments,
+        );
         setComposerMode('reply');
         return;
       }
-      await actions.sendMessage(content);
+      await actions.sendMessage(content, attachments);
     },
     [actions, composerMode, focus, research, state.activeSessionId],
   );
@@ -234,15 +270,16 @@ function Workspace() {
               <h1 className="session-head__name">
                 {activeTask?.title ?? 'Celeste'}
               </h1>
-              {activeTask ? (
+              {activeTask && activeTask.status !== 'completed' ? (
                 <span className={`pill pill--${activeTask.status}`}>{statusLabel(activeTask.status)}</span>
               ) : null}
               {activeProvider ? (
-                <span className="badge badge--provider" title="Active provider and model">
+                <span
+                  className="badge badge--provider"
+                  title={`Active model: ${activeProvider.label} (${activeProvider.model})`}
+                >
                   <Icon name="sparkle" size={11} />
                   {activeProvider.label}
-                  <span className="badge__sep">/</span>
-                  {activeProvider.model}
                 </span>
               ) : null}
               {activeTask && activeTask.artifacts.length > 0 ? (
@@ -251,6 +288,62 @@ function Workspace() {
                   {activeTask.artifacts.length}
                 </span>
               ) : null}
+            </div>
+
+            <div className="session-head__view-controls">
+              <div className="segmented-tabs" role="tablist">
+                <button
+                  type="button"
+                  className={`segmented-tab${activeTab === 'chat' && !splitView ? ' segmented-tab--active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('chat');
+                    setSplitView(false);
+                  }}
+                  role="tab"
+                  aria-selected={activeTab === 'chat' && !splitView}
+                >
+                  <Icon name="bot" size={13} />
+                  <span>Thread</span>
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-tab${activeTab === 'browser' || (splitView && sidePane === 'browser') ? ' segmented-tab--active' : ''}`}
+                  onClick={() => {
+                    if (splitView) setSidePane('browser');
+                    else setActiveTab('browser');
+                  }}
+                  role="tab"
+                  aria-selected={activeTab === 'browser' || (splitView && sidePane === 'browser')}
+                >
+                  <Icon name="globe" size={13} />
+                  <span>Live Browser</span>
+                  {activeTask?.activeBrowser ? <span className="tab-dot" /> : null}
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-tab${activeTab === 'canvas' || (splitView && sidePane === 'canvas') ? ' segmented-tab--active' : ''}`}
+                  onClick={() => {
+                    if (splitView) setSidePane('canvas');
+                    else setActiveTab('canvas');
+                  }}
+                  role="tab"
+                  aria-selected={activeTab === 'canvas' || (splitView && sidePane === 'canvas')}
+                >
+                  <Icon name="sparkle" size={13} />
+                  <span>Canvas</span>
+                  {activeTask?.canvas ? <span className="tab-dot" /> : null}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className={`icon-button${splitView ? ' icon-button--accent' : ''}`}
+                onClick={() => setSplitView((v) => !v)}
+                title={splitView ? 'Close split view' : 'Open side-by-side split view'}
+                aria-label="Toggle split view"
+              >
+                <Icon name="panel" size={14} />
+              </button>
             </div>
 
             <div className="session-head__actions">
@@ -267,41 +360,132 @@ function Workspace() {
             </div>
           </header>
 
-          <div className="main__timeline">
-            <Timeline
-              items={timeline}
-              sessionId={state.activeSessionId}
-              dismissedHumans={state.dismissedHumans}
-              onDismissHuman={actions.dismissHuman}
-              onRespondApproval={(requestId, decision) =>
-                void actions.respondApproval(requestId, decision)
-              }
-              busy={state.busy}
-              taskSources={activeTask?.sources}
-              onAsk={(question) => void actions.sendMessage(question)}
-            />
-          </div>
+          {splitView ? (
+            <div className="workspace-split">
+              <div className="workspace-split__left">
+                <div className="main__timeline">
+                  <Timeline
+                    items={timeline}
+                    sessionId={state.activeSessionId}
+                    dismissedHumans={state.dismissedHumans}
+                    onDismissHuman={actions.dismissHuman}
+                    onRespondApproval={(requestId, decision) =>
+                      void actions.respondApproval(requestId, decision)
+                    }
+                    busy={state.busy}
+                    taskSources={activeTask?.sources}
+                    onAsk={(question) => void actions.sendMessage(question)}
+                    onOpenCanvas={handleOpenCanvas}
+                    onOpenBrowser={handleOpenBrowser}
+                  />
+                </div>
 
-          <div className="main__composer" ref={composerRef}>
-            <Composer
-              providers={state.providers}
-              activeProviderId={activeProvider?.id ?? null}
-              onProviderChange={(id) => void actions.switchProvider(id)}
-              autoApprove={state.settings.autoApprove}
-              onAutoApproveChange={(value) => actions.setSettings({ autoApprove: value })}
-              focus={focus}
-              onFocusChange={setFocus}
-              research={research}
-              onResearchChange={setResearch}
-              onSend={handleSend}
-              busy={state.busy}
-              hasSession={state.activeSessionId !== null && composerMode === 'reply'}
-              running={isRunning}
-              onCancel={() => void actions.cancelTask()}
-              focusToken={focusComposerToken}
-              mode={composerMode}
-            />
-          </div>
+                <div className="main__composer" ref={composerRef}>
+                  <Composer
+                    providers={state.providers}
+                    activeProviderId={activeProvider?.id ?? null}
+                    onProviderChange={(id) => void actions.switchProvider(id)}
+                    autoApprove={state.settings.autoApprove}
+                    onAutoApproveChange={(value) => actions.setSettings({ autoApprove: value })}
+                    focus={focus}
+                    onFocusChange={setFocus}
+                    research={research}
+                    onResearchChange={setResearch}
+                    onSend={handleSend}
+                    busy={state.busy}
+                    hasSession={state.activeSessionId !== null && composerMode === 'reply'}
+                    running={isRunning}
+                    onCancel={() => void actions.cancelTask()}
+                    focusToken={focusComposerToken}
+                    mode={composerMode}
+                  />
+                </div>
+              </div>
+
+              <div className="workspace-split__right">
+                {sidePane === 'browser' ? (
+                  <BrowserWrapper
+                    activeAction={activeTask?.activeBrowser ?? null}
+                    browserHistory={activeTask?.browserHistory ?? []}
+                    extensionConnected={state.extensionConnected}
+                    onClose={() => setSplitView(false)}
+                    onNavigate={(url) => void actions.navigateBrowser(url)}
+                    onCaptureScreenshot={() => actions.captureScreenshot()}
+                  />
+                ) : (
+                  <CanvasPane
+                    key={activeTask?.canvas?.id ?? 'canvas-empty'}
+                    canvas={activeTask?.canvas ?? null}
+                    onClose={() => setSplitView(false)}
+                    onAsk={(prompt) => void actions.sendMessage(prompt)}
+                  />
+                )}
+              </div>
+            </div>
+          ) : activeTab === 'browser' ? (
+            <div className="main__full-pane">
+              <BrowserWrapper
+                activeAction={activeTask?.activeBrowser ?? null}
+                browserHistory={activeTask?.browserHistory ?? []}
+                extensionConnected={state.extensionConnected}
+                onClose={() => setActiveTab('chat')}
+                onNavigate={(url) => void actions.navigateBrowser(url)}
+                onCaptureScreenshot={() => actions.captureScreenshot()}
+              />
+            </div>
+          ) : activeTab === 'canvas' ? (
+            <div className="main__full-pane">
+              <CanvasPane
+                key={activeTask?.canvas?.id ?? 'canvas-empty'}
+                canvas={activeTask?.canvas ?? null}
+                onClose={() => setActiveTab('chat')}
+                onAsk={(prompt) => {
+                  setActiveTab('chat');
+                  void actions.sendMessage(prompt);
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="main__timeline">
+                <Timeline
+                  items={timeline}
+                  sessionId={state.activeSessionId}
+                  dismissedHumans={state.dismissedHumans}
+                  onDismissHuman={actions.dismissHuman}
+                  onRespondApproval={(requestId, decision) =>
+                    void actions.respondApproval(requestId, decision)
+                  }
+                  busy={state.busy}
+                  taskSources={activeTask?.sources}
+                  onAsk={(question) => void actions.sendMessage(question)}
+                  onOpenCanvas={handleOpenCanvas}
+                  onOpenBrowser={handleOpenBrowser}
+                />
+              </div>
+
+              <div className="main__composer" ref={composerRef}>
+                <Composer
+                  providers={state.providers}
+                  activeProviderId={activeProvider?.id ?? null}
+                  onProviderChange={(id) => void actions.switchProvider(id)}
+                  autoApprove={state.settings.autoApprove}
+                  onAutoApproveChange={(value) => actions.setSettings({ autoApprove: value })}
+                  focus={focus}
+                  onFocusChange={setFocus}
+                  research={research}
+                  onResearchChange={setResearch}
+                  onSend={handleSend}
+                  busy={state.busy}
+                  hasSession={state.activeSessionId !== null && composerMode === 'reply'}
+                  running={isRunning}
+                  onCancel={() => void actions.cancelTask()}
+                  focusToken={focusComposerToken}
+                  mode={composerMode}
+                />
+              </div>
+            </>
+          )}
         </main>
       </div>
 

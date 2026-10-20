@@ -1319,8 +1319,25 @@ async function waitForElement(params: { selector?: string; text?: string; timeou
 /* -------------------------------------------------------------------------- */
 
 const HIGHLIGHT_ID = '__celeste_highlight';
+const CLICK_MARKER_ID = '__celeste_click_marker';
 
-function highlightElement(el: HTMLElement): { ref?: string; box: { x: number; y: number; width: number; height: number } } {
+function injectCelesteStyles(): void {
+  if (document.getElementById('__celeste_styles')) return;
+  const style = document.createElement('style');
+  style.id = '__celeste_styles';
+  style.textContent = `
+    @keyframes celestePulse {
+      0% { transform: scale(0.3); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+  `;
+  (document.head || document.documentElement).appendChild(style);
+}
+
+function highlightElement(
+  el: HTMLElement,
+  label?: string,
+): { ref?: string; box: { x: number; y: number; width: number; height: number } } {
   document.getElementById(HIGHLIGHT_ID)?.remove();
   const rect = el.getBoundingClientRect();
   const overlay = document.createElement('div');
@@ -1329,16 +1346,83 @@ function highlightElement(el: HTMLElement): { ref?: string; box: { x: number; y:
   overlay.style.position = 'fixed';
   overlay.style.pointerEvents = 'none';
   overlay.style.zIndex = '2147483646';
-  overlay.style.border = '2px solid #8b5cf6';
-  overlay.style.background = 'rgba(139, 92, 246, 0.18)';
+  overlay.style.border = '2px solid #20808d';
+  overlay.style.background = 'rgba(32, 128, 141, 0.15)';
   overlay.style.borderRadius = '4px';
   overlay.style.left = `${rect.left}px`;
   overlay.style.top = `${rect.top}px`;
   overlay.style.width = `${rect.width}px`;
   overlay.style.height = `${rect.height}px`;
   overlay.style.transition = 'all 120ms ease-out';
+  overlay.style.boxShadow = '0 0 12px rgba(32, 128, 141, 0.4)';
+
+  if (label) {
+    const badge = document.createElement('div');
+    badge.textContent = label;
+    badge.style.position = 'absolute';
+    badge.style.left = '0';
+    badge.style.top = '-22px';
+    badge.style.background = '#18181b';
+    badge.style.color = '#5abed0';
+    badge.style.fontSize = '10.5px';
+    badge.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+    badge.style.fontWeight = '600';
+    badge.style.padding = '2px 7px';
+    badge.style.borderRadius = '6px';
+    badge.style.border = '1px solid rgba(90, 190, 208, 0.35)';
+    badge.style.whiteSpace = 'nowrap';
+    overlay.appendChild(badge);
+  }
+
   (document.body ?? document.documentElement).appendChild(overlay);
   return { box: boxOf(el) };
+}
+
+function showClickVisual(point: { x: number; y: number }, target: HTMLElement, label?: string): void {
+  injectCelesteStyles();
+  document.getElementById(CLICK_MARKER_ID)?.remove();
+  highlightElement(target, label);
+
+  const marker = document.createElement('div');
+  marker.id = CLICK_MARKER_ID;
+  marker.setAttribute('aria-hidden', 'true');
+  marker.style.position = 'fixed';
+  marker.style.left = `${point.x}px`;
+  marker.style.top = `${point.y}px`;
+  marker.style.width = '0px';
+  marker.style.height = '0px';
+  marker.style.zIndex = '2147483647';
+  marker.style.pointerEvents = 'none';
+
+  const dot = document.createElement('div');
+  dot.style.position = 'absolute';
+  dot.style.left = '-7px';
+  dot.style.top = '-7px';
+  dot.style.width = '14px';
+  dot.style.height = '14px';
+  dot.style.borderRadius = '50%';
+  dot.style.background = '#20808d';
+  dot.style.boxShadow = '0 0 14px rgba(32, 128, 141, 0.95), 0 0 28px rgba(32, 128, 141, 0.6)';
+  dot.style.border = '2px solid #ffffff';
+
+  const ring = document.createElement('div');
+  ring.style.position = 'absolute';
+  ring.style.left = '-24px';
+  ring.style.top = '-24px';
+  ring.style.width = '48px';
+  ring.style.height = '48px';
+  ring.style.borderRadius = '50%';
+  ring.style.border = '2px solid rgba(32, 128, 141, 0.85)';
+  ring.style.animation = 'celestePulse 1.2s cubic-bezier(0, 0.2, 0.8, 1) forwards';
+
+  marker.appendChild(dot);
+  marker.appendChild(ring);
+  (document.body ?? document.documentElement).appendChild(marker);
+
+  window.setTimeout(() => {
+    marker.remove();
+    document.getElementById(HIGHLIGHT_ID)?.remove();
+  }, 1600);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1378,9 +1462,21 @@ async function invoke(method: string, params: Record<string, unknown>): Promise<
 
       const urlBefore = location.href;
       const point = clickElement(target, button);
+      const label = usedRef
+        ? `[${usedRef}] <${target.tagName.toLowerCase()}> ${(target.textContent || '').trim().slice(0, 30)}`
+        : `<${target.tagName.toLowerCase()}>`;
+      showClickVisual(point, target, label);
       await sleep(30);
       const navigated = location.href !== urlBefore;
-      const result: Record<string, unknown> = { ok: true, point };
+      const result: Record<string, unknown> = {
+        ok: true,
+        point,
+        element: {
+          tag: target.tagName.toLowerCase(),
+          text: (target.textContent || '').trim().slice(0, 80),
+          box: boxOf(target),
+        },
+      };
       if (usedRef) result['ref'] = usedRef;
       if (navigated) {
         result['navigated'] = true;
@@ -1393,10 +1489,12 @@ async function invoke(method: string, params: Record<string, unknown>): Promise<
       const ref = params['ref'] as string | undefined;
       const text = typeof params['text'] === 'string' ? params['text'] : '';
       const el = requireElement(ref, 'type target');
+      highlightElement(el, `Typing: ${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`);
       const outcome = await typeInto(el, text, {
         clear: params['clear'] === true,
         delayMs: typeof params['delayMs'] === 'number' ? params['delayMs'] : undefined,
       });
+      window.setTimeout(() => document.getElementById(HIGHLIGHT_ID)?.remove(), 1400);
       return { ok: true, typed: outcome.typed, ...(ref ? { ref } : {}) };
     }
 

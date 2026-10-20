@@ -1,4 +1,4 @@
-import type { ToolCall, ToolDefinition } from '@celeste/protocol';
+import type { BrowserActionInfo, BrowserElementInfo, ToolCall, ToolDefinition } from '@celeste/protocol';
 import type { BrowserClient, ToolContext, ToolHandler } from './types.js';
 import { fail, ok } from './types.js';
 import { registerSource } from './search-tools.js';
@@ -85,6 +85,16 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
     }
   };
 
+  const tryScreenshot = async (): Promise<string | undefined> => {
+    try {
+      if (!browser.isConnected()) return undefined;
+      const res = await browser.send<{ data?: string }>('screenshot', { format: 'jpeg' }, { timeoutMs: 3500 });
+      return res?.data;
+    } catch {
+      return undefined;
+    }
+  };
+
   const navigate: ToolHandler = {
     definition: def(
       'browser_navigate',
@@ -106,6 +116,27 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
       );
       if (isFailure(result)) return result;
       const data = result as { url: string; title: string; snapshot?: unknown };
+
+      let screenshot: string | undefined;
+      try {
+        screenshot = await tryScreenshot();
+      } catch {
+        /* ignore */
+      }
+      ctx.bus.publish({
+        type: 'task.browser.action',
+        taskId: ctx.taskId,
+        action: {
+          id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          action: 'navigate',
+          url: data.url,
+          title: data.title,
+          screenshot,
+          at: Date.now(),
+        },
+        at: Date.now(),
+      });
+
       return ok(
         call,
         `Navigated to ${data.title || data.url}`,
@@ -183,9 +214,44 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
         );
       }
 
-      const result = await send<{ url?: string; navigated?: boolean }>(call, 'click', params);
+      const result = await send<{
+        url?: string;
+        navigated?: boolean;
+        point?: { x: number; y: number };
+        ref?: string;
+        element?: BrowserElementInfo;
+      }>(call, 'click', params);
       if (isFailure(result)) return result;
-      const data = result as { url?: string; navigated?: boolean };
+      const data = result as {
+        url?: string;
+        navigated?: boolean;
+        point?: { x: number; y: number };
+        ref?: string;
+        element?: BrowserElementInfo;
+      };
+
+      let screenshot: string | undefined;
+      try {
+        screenshot = await tryScreenshot();
+      } catch {
+        /* ignore */
+      }
+      ctx.bus.publish({
+        type: 'task.browser.action',
+        taskId: ctx.taskId,
+        action: {
+          id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          action: 'click',
+          point: data.point,
+          ref: data.ref ?? (args.ref ? String(args.ref) : undefined),
+          element: data.element,
+          url: data.url,
+          screenshot,
+          at: Date.now(),
+        },
+        at: Date.now(),
+      });
+
       return ok(
         call,
         data.navigated ? `Clicked and navigated to ${data.url}` : 'Clicked',
@@ -231,6 +297,20 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
         delayMs: Number(args.delayMs ?? 25),
       });
       if (isFailure(result)) return result;
+
+      ctx.bus.publish({
+        type: 'task.browser.action',
+        taskId: ctx.taskId,
+        action: {
+          id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          action: 'type',
+          ref: String(args.ref),
+          text: String(args.text),
+          at: Date.now(),
+        },
+        at: Date.now(),
+      });
+
       return ok(call, `Typed ${String(args.text).length} characters`, result, 'Text entered.');
     },
   };
@@ -383,6 +463,21 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
       });
       if (isFailure(result)) return result;
       const data = result as { data?: string; mimeType?: string };
+
+      if (data.data) {
+        ctx.bus.publish({
+          type: 'task.browser.action',
+          taskId: ctx.taskId,
+          action: {
+            id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            action: 'screenshot',
+            screenshot: data.data,
+            at: Date.now(),
+          },
+          at: Date.now(),
+        });
+      }
+
       return ok(call, 'Screenshot captured', {
         mimeType: data.mimeType,
         width: 0,

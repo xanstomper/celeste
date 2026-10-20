@@ -46,7 +46,13 @@ export type IconName =
   | 'external'
   | 'tool'
   | 'list'
-  | 'lock';
+  | 'lock'
+  | 'paperclip'
+  | 'image'
+  | 'cursor'
+  | 'eye'
+  | 'maximize'
+  | 'minimize';
 
 const PATHS: Record<IconName, ReactNode> = {
   send: <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" />,
@@ -163,6 +169,16 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M7 8h6M7 11h6M7 14h4" />
     </>
   ),
+  paperclip: (
+    <path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+    </>
+  ),
   copy: (
     <>
       <rect x="9" y="9" width="11" height="11" rx="2" />
@@ -254,6 +270,19 @@ const PATHS: Record<IconName, ReactNode> = {
       <rect x="4" y="10" width="16" height="11" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </>
+  ),
+  cursor: <path d="m4 4 7.07 17 2.51-7.39L21 11.07z" />,
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  maximize: (
+    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+  ),
+  minimize: (
+    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
   ),
 };
 

@@ -136,6 +136,42 @@ export interface ImagePart {
 
 export type ContentPart = TextPart | ImagePart;
 
+/** An image the user attached to a task, before it becomes a ContentPart. */
+export interface Attachment {
+  /** Original file name, shown on the chip. */
+  name: string;
+  /** e.g. `image/png`. */
+  mimeType: string;
+  /** Base64 bytes, without the `data:` prefix. */
+  data: string;
+}
+
+export type CanvasKind = 'document' | 'visual' | 'image' | 'project';
+
+export interface CanvasFile {
+  path: string;
+  content: string;
+  language?: string;
+}
+
+/**
+ * A workspace the agent builds beside the conversation.
+ *
+ * - `document` — Markdown report.
+ * - `visual`   — a complete, self-contained HTML page (charts, dashboards, diagrams).
+ * - `image`    — an image URL (generated) or data URL (attached).
+ * - `project`  — a small file tree.
+ */
+export interface CanvasState {
+  id: string;
+  kind: CanvasKind;
+  title: string;
+  /** Markdown, HTML, or image URL depending on `kind`. */
+  content: string;
+  files?: CanvasFile[];
+  updatedAt: number;
+}
+
 export interface ChatMessage {
   role: Role;
   content: string | ContentPart[];
@@ -179,6 +215,26 @@ export type SearchFocus = 'web' | 'academic' | 'news';
  */
 export type ResearchDepth = 'quick' | 'research';
 
+export interface BrowserElementInfo {
+  tag: string;
+  text?: string;
+  selector?: string;
+  box?: { x: number; y: number; width: number; height: number };
+}
+
+export interface BrowserActionInfo {
+  id: string;
+  action: 'navigate' | 'click' | 'type' | 'scroll' | 'snapshot' | 'screenshot' | 'extract';
+  url?: string;
+  title?: string;
+  point?: { x: number; y: number };
+  ref?: string;
+  element?: BrowserElementInfo;
+  text?: string;
+  screenshot?: string;
+  at: number;
+}
+
 /**
  * A long-running unit of work. Checkpoints allow a task to resume after a
  * crash, a model switch, or a browser session reload.
@@ -203,6 +259,12 @@ export interface TaskState {
   sources?: Source[];
   /** Follow-up questions offered under the latest answer. */
   suggestions?: string[];
+  /** The workspace the agent built for this task, if any. */
+  canvas?: CanvasState;
+  /** The latest browser action executed by the agent. */
+  activeBrowser?: BrowserActionInfo;
+  /** History of recent browser actions. */
+  browserHistory?: BrowserActionInfo[];
   createdAt: number;
   updatedAt: number;
   error?: ToolError;

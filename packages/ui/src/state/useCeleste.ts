@@ -14,6 +14,7 @@ import type {
   Artifact,
   DaemonEvent,
   HealthResponse,
+  Attachment,
   ProviderSummary,
   ResearchDepth,
   SearchFocus,
@@ -75,11 +76,20 @@ export interface CelesteState {
 
 export interface CelesteActions {
   selectSession: (id: string) => void;
-  createSession: (prompt: string, focus?: SearchFocus, depth?: ResearchDepth) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  /** Clears the active thread and shows the welcome state. */
+  newTask: () => void;
+  createSession: (
+    prompt: string,
+    focus?: SearchFocus,
+    depth?: ResearchDepth,
+    attachments?: Attachment[],
+  ) => Promise<void>;
+  sendMessage: (content: string, attachments?: Attachment[]) => Promise<void>;
   respondApproval: (requestId: string, decision: 'approve' | 'deny') => Promise<void>;
   cancelTask: () => Promise<void>;
   switchProvider: (id: string) => Promise<void>;
+  navigateBrowser: (url: string) => Promise<void>;
+  captureScreenshot: () => Promise<string | void>;
   setSettings: (patch: Partial<Settings>) => void;
   setTheme: (theme: Theme) => void;
   toggleDemoMode: () => Promise<void>;

@@ -9,6 +9,7 @@ import { API_ROUTES } from '@celeste/protocol';
 import type {
   ApprovalResponseRequest,
   ArtifactListResponse,
+  Attachment,
   CreateSessionRequest,
   CreateSessionResponse,
   DaemonEvent,
@@ -141,8 +142,12 @@ export interface DaemonTransport {
   getSession(id: string): Promise<TaskState>;
   approve(id: string, request: ApprovalResponseRequest): Promise<void>;
   cancel(id: string): Promise<void>;
-  sendMessage(id: string, content: string): Promise<void>;
+  sendMessage(id: string, content: string, attachments?: Attachment[]): Promise<void>;
   listArtifacts(): Promise<ArtifactListResponse['artifacts']>;
+  getBrowserStatus?(): Promise<{ connected: boolean; activeTab?: { url?: string; title?: string }; info?: unknown }>;
+  getBrowserScreenshot?(): Promise<{ data: string | null; mimeType: string }>;
+  navigateBrowser?(url: string): Promise<{ ok: boolean; result?: unknown }>;
+  getBrowserTabs?(): Promise<{ ok: boolean; tabs?: unknown }>;
   /** Subscribe to the event stream of a single session. */
   subscribe(sessionId: string, onEvent: (event: DaemonEvent) => void): () => void;
   /** Subscribe to every event the daemon emits (used by the websocket). */
@@ -214,16 +219,35 @@ export class HttpTransport implements DaemonTransport {
     await request<{ ok: true }>(this.base, API_ROUTES.sessionCancel(id), { method: 'POST' });
   }
 
-  async sendMessage(id: string, content: string): Promise<void> {
+  async sendMessage(id: string, content: string, attachments?: Attachment[]): Promise<void> {
     await request<{ ok: true }>(this.base, API_ROUTES.sessionSend(id), {
       method: 'POST',
-      body: { content },
+      body: { content, ...(attachments?.length ? { attachments } : {}) },
     });
   }
 
   async listArtifacts(): Promise<ArtifactListResponse['artifacts']> {
     const payload = await request<ArtifactListResponse>(this.base, API_ROUTES.artifacts);
     return payload.artifacts ?? [];
+  }
+
+  async getBrowserStatus(): Promise<{ connected: boolean; activeTab?: { url?: string; title?: string }; info?: unknown }> {
+    return request(this.base, API_ROUTES.browserStatus);
+  }
+
+  async getBrowserScreenshot(): Promise<{ data: string | null; mimeType: string }> {
+    return request(this.base, API_ROUTES.browserScreenshot);
+  }
+
+  async navigateBrowser(url: string): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserNavigate, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  async getBrowserTabs(): Promise<{ ok: boolean; tabs?: unknown }> {
+    return request(this.base, API_ROUTES.browserTabs);
   }
 
   /**

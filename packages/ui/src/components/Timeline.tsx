@@ -5,7 +5,14 @@ import { formatClockTime } from '../lib/format';
 import { Markdown } from '../lib/markdown';
 import { SourcesRow } from './SourcesRow';
 import { Suggestions } from './Suggestions';
-import type { Source } from '@celeste/protocol';
+import type { CanvasKind, CanvasState, Source } from '@celeste/protocol';
+
+const STARTERS = [
+  'Compare the leading AI browsers',
+  'Find the best espresso machine under $500',
+  'How does CRISPR work?',
+  'Summarise today in tech news',
+];
 import type { TimelineItem } from '../state/timeline';
 import { ApprovalCard } from './ApprovalCard';
 import { ArtifactCard } from './ArtifactCard';
@@ -24,6 +31,10 @@ export interface TimelineProps {
   taskSources?: Source[];
   /** Starts a new turn from a suggested question. */
   onAsk?: (question: string) => void;
+  /** Opens the task canvas over the thread. */
+  onOpenCanvas?: (canvas: CanvasState) => void;
+  /** Opens the live browser viewport pane. */
+  onOpenBrowser?: () => void;
 }
 
 function reduceMotion(): boolean {
@@ -79,6 +90,8 @@ export function Timeline({
   busy,
   taskSources,
   onAsk,
+  onOpenCanvas,
+  onOpenBrowser,
 }: TimelineProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(items.length);
@@ -120,13 +133,27 @@ export function Timeline({
       <div className="timeline timeline--empty">
         <div className="empty-state">
           <span className="empty-state__icon">
-            <Icon name="sparkle" size={22} />
+            <Icon name="sparkle" size={24} />
           </span>
-          <h2 className="empty-state__title">Nothing here yet</h2>
+          <h2 className="empty-state__title">What do you want to know?</h2>
           <p className="empty-state__text">
-            Describe a task below and Celeste will plan it, drive the browser and show you every tool call as it
-            happens.
+            Ask anything, or tell Celeste what to do in your browser. It plans, searches the live web and shows
+            every step.
           </p>
+          <div className="empty-state__starters">
+            {STARTERS.map((starter) => (
+              <button
+                type="button"
+                key={starter}
+                className="empty-state__starter"
+                onClick={() => onAsk?.(starter)}
+                disabled={!onAsk}
+              >
+                <span>{starter}</span>
+                <Icon name="chevron-right" size={13} />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -159,43 +186,53 @@ export function Timeline({
             // own — the tool card says everything. Rendering an empty bubble
             // just adds noise.
             if (!isUser && !item.text.trim()) return null;
-            const cites = isUser
-              ? { refs: [], byNumber: new Map() }
-              : buildCitations(item.text, sourceIndex);
+            if (isUser) {
+              return (
+                <div className="query" key={item.id}>
+                  {item.images && item.images.length > 0 ? (
+                    <div className="bubble__images">
+                      {item.images.map((image, index) => (
+                        <img
+                          key={`${item.id}-image-${index}`}
+                          className="bubble__image"
+                          src={`data:${image.mimeType};base64,${image.data}`}
+                          alt={`Attachment ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {item.text ? <h2 className="query__text">{item.text}</h2> : null}
+                  <div className="query__meta">
+                    <Icon name="user" size={11} />
+                    <span>You</span>
+                    <time className="bubble__time" dateTime={new Date(item.at).toISOString()}>
+                      {formatClockTime(item.at)}
+                    </time>
+                  </div>
+                </div>
+              );
+            }
+
+            const cites = buildCitations(item.text, sourceIndex);
             return (
-              <div className={`bubble bubble--${isUser ? 'user' : 'assistant'}`} key={item.id}>
+              <div className="bubble bubble--assistant" key={item.id}>
                 <div className="bubble__body">
-                  {item.text ? (
-                    isUser ? (
-                      <p className="bubble__text">{item.text}</p>
-                    ) : (
-                      <Markdown
-                        className="bubble__text bubble__text--prose"
-                        content={item.text}
-                        citations={cites.byNumber}
-                      />
-                    )
-                  ) : (
-                    <p className="bubble__text bubble__text--muted">(empty message)</p>
-                  )}
+                  <Markdown
+                    className="bubble__text bubble__text--prose"
+                    content={item.text}
+                    citations={cites.byNumber}
+                  />
                 </div>
                 <div className="bubble__meta">
-                  {isUser ? (
-                    <span className="bubble__author">
-                      <Icon name="user" size={11} />
-                      You
-                    </span>
-                  ) : (
-                    <span className="bubble__author">
-                      <Icon name="bot" size={11} />
-                      Celeste
-                      {item.name ? <span className="badge badge--model">{item.name}</span> : null}
-                    </span>
-                  )}
+                  <span className="bubble__author">
+                    <Icon name="bot" size={11} />
+                    Celeste
+                    {item.name ? <span className="badge badge--model">{item.name}</span> : null}
+                  </span>
                   <time className="bubble__time" dateTime={new Date(item.at).toISOString()}>
                     {formatClockTime(item.at)}
                   </time>
-                  {!isUser && item.text.trim() ? <CopyButton text={item.text} /> : null}
+                  {item.text.trim() ? <CopyButton text={item.text} /> : null}
                 </div>
                 {cites.refs.length > 0 && item.id === lastAnswerId ? (
                   <SourcesRow refs={cites.refs} />
@@ -228,8 +265,67 @@ export function Timeline({
             );
           }
 
+          case 'canvas': {
+            const icon: Record<CanvasKind, 'file' | 'sparkle' | 'image' | 'folder'> = {
+              document: 'file',
+              visual: 'sparkle',
+              image: 'image',
+              project: 'folder',
+            };
+            return (
+              <button
+                type="button"
+                className="canvas-card"
+                key={item.id}
+                onClick={() => onOpenCanvas?.(item.canvas)}
+              >
+                <span className="canvas-card__icon">
+                  <Icon name={icon[item.canvas.kind]} size={17} />
+                </span>
+                <span className="canvas-card__text">
+                  <span className="canvas-card__title">{item.canvas.title}</span>
+                  <span className="canvas-card__meta">
+                    {item.canvas.kind} canvas · click to open
+                  </span>
+                </span>
+                <Icon name="chevron-right" size={15} />
+              </button>
+            );
+          }
+
           case 'tool':
-            return <ToolCard key={item.id} item={item} />;
+            return <ToolCard key={item.id} item={item} onOpenBrowser={onOpenBrowser} />;
+
+          case 'browser': {
+            return (
+              <div
+                className="browser-action-card"
+                key={item.id}
+                onClick={onOpenBrowser}
+                role="button"
+                tabIndex={0}
+                title="Open Live Browser Viewport"
+              >
+                <div className="browser-action-card__left">
+                  <span className={`browser-action-card__badge action-badge--${item.action.action}`}>
+                    <Icon name="globe" size={12} />
+                    {item.action.action.toUpperCase()}
+                  </span>
+                  <span className="browser-action-card__title">
+                    {item.action.action === 'click' && item.action.point
+                      ? `Clicked at (${Math.round(item.action.point.x)}, ${Math.round(
+                          item.action.point.y,
+                        )})`
+                      : item.action.url || item.action.title || 'Browser action'}
+                  </span>
+                </div>
+                <span className="browser-action-card__view">
+                  <Icon name="eye" size={12} />
+                  Live Browser
+                </span>
+              </div>
+            );
+          }
 
           case 'plan':
             return <PlanView key={item.id} steps={item.steps} />;

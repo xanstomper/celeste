@@ -6,7 +6,7 @@ import type { ToolRegistry, ToolContext } from '@celeste/tools';
 import type { BrowserClient } from '@celeste/tools';
 import type { EventBus } from '../events.js';
 import type { TaskStore } from '../store.js';
-import { cleanAnswer } from './answer.js';
+import { cleanAnswer, stripCanvasEcho } from './answer.js';
 import { shouldPlan } from './plan-policy.js';
 import type { ApprovalManager } from './approval.js';
 import type { SessionGuard } from '../browser/session-guard.js';
@@ -252,7 +252,13 @@ export class Agent {
       // the answer, so its text and its streamed event agree.
       const message =
         toolCalls.length === 0 && typeof response.message.content === 'string'
-          ? { ...response.message, content: cleanAnswer(response.message.content) }
+          ? {
+              ...response.message,
+              content: stripCanvasEcho(
+                cleanAnswer(response.message.content),
+                this.options.store.get(taskId)?.canvas,
+              ),
+            }
           : response.message;
 
       this.options.store.appendMessage(taskId, message);
