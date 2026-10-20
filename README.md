@@ -41,7 +41,7 @@ built to remove:
 
 ---
 
-## Install
+## Quick start
 
 ```bash
 git clone <this-repo> celeste && cd celeste
@@ -49,16 +49,7 @@ pnpm install
 pnpm build
 ```
 
-### 1. Load the extension
-
-```bash
-pnpm build:ext
-```
-
-Then in Brave/Chromium: `brave://extensions` → enable **Developer mode** → **Load unpacked** →
-select `packages/extension/dist`.
-
-### 2. Pick a model
+### 1. Pick a free model
 
 Celeste finds providers automatically from your environment:
 
@@ -67,30 +58,62 @@ export OPENROUTER_API_KEY=sk-...     # or OPENAI_API_KEY / ANTHROPIC_API_KEY / G
 export OLLAMA_HOST=http://localhost:11434
 ```
 
-or add one explicitly:
+or run the setup script, which **probes every candidate endpoint for native
+tool calling** and writes only the ones that work:
 
 ```bash
-pnpm --filter @celeste/cli start add-provider '{
-  "id": "my-proxy",
-  "kind": "openai-compatible",
-  "baseUrl": "http://localhost:8000/v1",
-  "model": "my-model",
-  "apiKeyEnv": "MY_PROXY_KEY"
-}'
-
-pnpm --filter @celeste/cli start use my-proxy
+node scripts/setup-free-providers.mjs
 ```
 
-### 3. Run
+It writes `~/.celeste/config.json` and `~/.celeste/.env`. See
+[Free providers](#free-providers) below.
+
+### 2. Launch it
 
 ```bash
-# One-shot task
-pnpm celeste run "Research the top three open-source game engines and write a comparison spreadsheet"
-
-# Or the daemon + UI
-pnpm celeste serve
-pnpm dev:ui          # http://localhost:5173
+celeste serve          # the daemon: HTTP API + browser bridge
+celeste browse         # a visible browser with the agent panel docked right
 ```
+
+`celeste browse` opens Brave or Chrome with the Celeste extension loaded and
+**the agent panel already open**, docked to the right of the page — the
+Perplexity Comet model. You browse normally and watch the agent work.
+
+```
+┌──────────────────────────────┬─────────────────────┐
+│                              │  ◈ Celeste          │
+│   the page you are reading   │  ─────────────      │
+│                              │  > research this     │
+│                              │                     │
+│                              │  ▸ plan:            │
+│                              │    ✓ open the site   │
+│                              │    • extract prices  │
+│                              │                     │
+│                              │  [ Ask anything…  ] │
+└──────────────────────────────┴─────────────────────┘
+```
+
+Other ways to open the panel:
+
+- **Ask** — a floating button on every page (bottom right).
+- **Ctrl+Shift+K** — opens the panel anywhere.
+- The **Celeste toolbar icon** — toggles the panel.
+
+Use `--real-profile` to drive your everyday browser profile, with all of its
+logins and sessions, instead of a dedicated one:
+
+```bash
+celeste browse --real-profile github.com
+```
+
+### 3. Run a task
+
+From the panel's composer, or from the terminal:
+
+```bash
+celeste run "Research the top three open-source game engines and write a comparison spreadsheet"
+```
+
 
 ---
 
@@ -205,6 +228,7 @@ Switching models is one assignment — no reload, no restart.
 
 ```
 celeste run <prompt...>       Run a task and stream the result
+celeste browse [url...]       Open a visible browser with the agent panel docked right
 celeste serve                Start the daemon (HTTP API + browser bridge)
 celeste models               List providers and models
 celeste use <provider-id>    Switch the active provider
@@ -213,6 +237,22 @@ celeste config               Show the resolved configuration
 celeste health               Check the daemon and the extension
 celeste mcp                  Run the MCP server on stdio
 ```
+
+### `celeste browse`
+
+```
+--browser <id>        brave | chrome | chromium
+--profile <dir>       profile directory (default ~/.celeste/browser-profile)
+--debug-port <n>      DevTools port used to open the panel (default 9222)
+--no-panel            do not open the agent panel automatically
+--real-profile        use your everyday browser profile, with its logins
+```
+
+The panel is opened automatically over the DevTools protocol, because
+`chrome.sidePanel.open()` refuses to run without a user gesture and a gesture
+does not survive the trip from a content script into the service worker.
+Chrome also remembers the open state, so later launches come up with the panel
+already docked.
 
 ---
 
@@ -241,6 +281,32 @@ asserts that a valid `.docx` lands on disk with the expected content inside
 
 Startup matters for MCP clients, so the heavy document libraries are loaded lazily:
 the MCP server answers its handshake in **0.16 s**, the daemon is ready in **0.27 s**.
+
+---
+
+## Free providers
+
+`scripts/setup-free-providers.mjs` probes every candidate for **native tool
+calling** — a provider that cannot emit a tool call is useless to an agent —
+and writes only the ones that pass:
+
+| Provider | Model | Credential |
+|---|---|---|
+| **SilkRoute** | `sr-fast` | a key minted from your local router |
+| **FreeInference.org** | `deepseek-v4-flash` | `FREEINFERENCE_API_KEY` |
+| **Pollinations** | `openai-fast` | none — no signup |
+| **Ollama** | whatever is pulled | none — fully local |
+
+Keys are read from `~/.celeste/.env` and `~/.hermes/.env`, so you do not have
+to export them in the shell that launches the daemon. Anything already in the
+environment always wins.
+
+SilkRoute's per-key daily budget defaults to 60 000 tokens, which one agent
+run can exhaust. Raise it in `~/silkroute/config.json`:
+
+```json
+{ "server": { "quota": { "per_key": { "tokens_per_day": 2000000 } } } }
+```
 
 ---
 
