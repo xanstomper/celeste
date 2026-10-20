@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 
-import type { Source } from '@celeste/protocol';
+import type { CitationRef } from './citations';
 
 /**
  * A small Markdown renderer.
@@ -119,7 +119,7 @@ const INLINE =
 export function renderInline(
   text: string,
   keyPrefix = 'i',
-  citations?: Map<number, Source>,
+  citations?: Map<number, CitationRef>,
 ): ReactNode[] {
   const out: ReactNode[] = [];
   let rest = text;
@@ -158,17 +158,17 @@ export function renderInline(
       out.push(
         <span className="md__cites" key={key}>
           {numbers.map((n, index) => {
-            const source = citations?.get(n);
-            return source ? (
+            const ref = citations?.get(n);
+            return ref ? (
               <a
                 className="md__cite"
                 key={`${key}-${n}-${index}`}
-                href={source.url}
+                href={ref.source.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                title={source.title}
+                title={ref.source.title}
               >
-                {n}
+                {ref.display}
               </a>
             ) : (
               <span className="md__cite md__cite--plain" key={`${key}-${n}-${index}`}>
@@ -215,7 +215,7 @@ export interface MarkdownProps {
   content: string;
   className?: string;
   /** Resolves `[n]` markers to real pages. */
-  citations?: Map<number, Source>;
+  citations?: Map<number, CitationRef>;
 }
 
 /** Renders a Markdown document as React elements. */

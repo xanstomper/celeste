@@ -57,6 +57,13 @@ export type DaemonEvent =
   | { type: 'task.approval'; taskId: string; request: ApprovalRequest; at: number }
   | { type: 'task.human'; taskId: string; reason: string; at: number }
   | { type: 'task.done'; taskId: string; status: 'completed' | 'failed' | 'cancelled'; at: number }
+  | {
+      type: 'task.suggestions';
+      taskId: string;
+      /** Follow-up questions the reader is likely to ask next. */
+      suggestions: string[];
+      at: number;
+    }
   | { type: 'extension.status'; connected: boolean; detail?: string; at: number }
   | { type: 'provider.changed'; providerId: string; model: string; at: number }
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string; at: number };

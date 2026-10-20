@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { API_ROUTES } from '@celeste/protocol';
 import type {
   ApprovalResponseRequest,
+  ChatMessage,
   CreateSessionRequest,
   DaemonEvent,
   ProviderSwitchRequest,
@@ -15,6 +16,7 @@ import type { BrowserBridge } from '../browser/bridge.js';
 import type { SessionGuard } from '../browser/session-guard.js';
 import type { EventBus } from '../events.js';
 import type { TaskStore } from '../store.js';
+import { FOLLOW_UP_SYSTEM_PROMPT } from '../agent/prompts.js';
 
 export interface DaemonOptions {
   port: number;
@@ -173,9 +175,15 @@ export class Daemon {
         }
 
         if (action === 'message' && method === 'POST') {
-          const body = (await readJson<{ content?: string }>(req)) ?? {};
+          const body = (await readJson<{ content?: string; providerId?: string; autoApprove?: boolean }>(
+            req,
+          )) ?? {};
           const content = String(body.content ?? '').trim();
           if (!content) return this.sendError(res, 400, 'INVALID_ARGS', 'content is required.');
+
+          const existing = this.options.store.get(id);
+          if (!existing) return this.sendError(res, 404, 'NOT_FOUND', `No session ${id}.`);
+
           this.options.store.appendMessage(id, { role: 'user', content });
           this.options.bus.publish({
             type: 'task.message',
@@ -183,6 +191,26 @@ export class Daemon {
             message: { role: 'user', content },
             at: Date.now(),
           });
+
+          // A follow-up is a new turn on the same thread: the agent reads the
+          // conversation so far and answers in context. Without this the
+          // message would just sit in the transcript unanswered.
+          const overrides = {
+            ...(body.providerId ? { providerId: body.providerId } : {}),
+            ...(body.autoApprove !== undefined ? { autoApprove: body.autoApprove } : {}),
+          };
+          void this.options.agent
+            .run(id, overrides)
+            .then(() => this.suggestFollowUps(id, overrides.providerId))
+            .catch((err) => {
+              this.options.bus.publish({
+                type: 'log',
+                level: 'error',
+                message: `Session ${id} crashed: ${err instanceof Error ? err.message : String(err)}`,
+                at: Date.now(),
+              });
+            });
+
           return this.sendJson(res, 200, { ok: true });
         }
       }
@@ -219,16 +247,84 @@ export class Daemon {
     };
 
     // Run the task in the background; the UI follows the event stream.
-    void this.options.agent.run(task.id, overrides).catch((err) => {
-      this.options.bus.publish({
-        type: 'log',
-        level: 'error',
-        message: `Task ${task.id} crashed: ${err instanceof Error ? err.message : String(err)}`,
-        at: Date.now(),
+    void this.options.agent
+      .run(task.id, overrides)
+      .then(() => this.suggestFollowUps(task.id, overrides.providerId))
+      .catch((err) => {
+        this.options.bus.publish({
+          type: 'log',
+          level: 'error',
+          message: `Task ${task.id} crashed: ${err instanceof Error ? err.message : String(err)}`,
+          at: Date.now(),
+        });
       });
-    });
 
     return { task: this.options.store.get(task.id) ?? task };
+  }
+
+  /**
+   * Offers follow-up questions once an answer is ready.
+   *
+   * Best effort by design: if the model is busy, unavailable, or returns
+   * something unusable, the answer simply arrives without suggestions. A
+   * nicety must never turn into a failed task.
+   */
+  private async suggestFollowUps(taskId: string, providerId?: string): Promise<void> {
+    try {
+      const task = this.options.store.get(taskId);
+      if (!task || task.status !== 'completed') return;
+
+      const answer = [...task.messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role === 'assistant' &&
+            messageText(message).trim().length > 40 &&
+            !message.toolCalls?.length,
+        );
+      const question = task.messages.find((message) => message.role === 'user');
+      if (!answer || !question) return;
+
+      const response = await this.options.gateway.chat(
+        {
+          messages: [
+            { role: 'system', content: FOLLOW_UP_SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: `Question: ${messageText(question).slice(0, 1200)}
+
+Answer:
+${messageText(answer).slice(0, 4000)}`,
+            },
+          ],
+          temperature: 0.5,
+          maxTokens: 220,
+          toolChoice: 'none',
+        },
+        providerId,
+      );
+
+      const suggestions = parseSuggestions(response.message);
+      if (suggestions.length === 0) return;
+
+      this.options.store.update(taskId, (state) => {
+        state.suggestions = suggestions;
+      });
+      this.options.bus.publish({
+        type: 'task.suggestions',
+        taskId,
+        suggestions,
+        at: Date.now(),
+      });
+    } catch (err) {
+      // A nicety, never a failure: report it and move on.
+      this.options.bus.publish({
+        type: 'log',
+        level: 'warn',
+        message: `Could not suggest follow-ups: ${err instanceof Error ? err.message : String(err)}`,
+        at: Date.now(),
+      });
+    }
   }
 
   /* ---------------------------------------------------------------------- */
@@ -330,4 +426,23 @@ async function readJson<T>(req: IncomingMessage): Promise<T> {
   } catch {
     throw new Error('Request body is not valid JSON.');
   }
+}
+
+/** The plain text of a chat message, whatever shape its content is in. */
+function messageText(message: ChatMessage): string {
+  if (typeof message.content === 'string') return message.content;
+  if (!Array.isArray(message.content)) return '';
+  return message.content
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('\n');
+}
+
+/** Pulls up to three question-shaped lines out of a model reply. */
+function parseSuggestions(message: ChatMessage): string[] {
+  return messageText(message)
+    .split('\n')
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .map((line) => line.replace(/^["'“”]+|["'“”]+$/g, '').trim())
+    .filter((line) => line.length >= 12 && line.length <= 160 && line.includes('?'))
+    .slice(0, 3);
 }

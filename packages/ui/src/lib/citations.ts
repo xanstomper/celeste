@@ -4,9 +4,18 @@ import type { TimelineItem } from '../state/timeline';
 /**
  * Citation plumbing.
  *
- * Sources are numbered once per task. The agent writes `[3]`, and the number
- * resolves to the same page everywhere in the conversation.
+ * Sources are numbered once per task, so `[3]` means the same page for the
+ * whole thread. An answer is then *displayed* with its own numbering, in
+ * order of first appearance — a reader should see "1", not "17", when the
+ * answer only used one page.
  */
+
+/** A citation as it appears in one answer. */
+export interface CitationRef {
+  /** The number the reader sees: 1, 2, 3, in order of appearance. */
+  display: number;
+  source: Source;
+}
 
 /** Every source the task has collected so far, keyed by citation number. */
 export function collectSources(items: TimelineItem[]): Map<number, Source> {
@@ -39,14 +48,32 @@ export function citedNumbers(text: string): number[] {
   return out;
 }
 
-/** Resolves citation numbers to the sources they point at. */
-export function resolveSources(numbers: number[], index: Map<number, Source>): Source[] {
-  const out: Source[] = [];
-  for (const n of numbers) {
+export interface Citations {
+  /** In display order, for the source row. */
+  refs: CitationRef[];
+  /** Keyed by the number written in the prose, for the inline pills. */
+  byNumber: Map<number, CitationRef>;
+}
+
+/**
+ * Resolves the numbers in an answer to sources and renumbers them for display.
+ *
+ * Numbers with no matching source are dropped rather than rendered as dead
+ * links: a citation the reader cannot follow is worse than none.
+ */
+export function buildCitations(text: string, index: Map<number, Source>): Citations {
+  const refs: CitationRef[] = [];
+  const byNumber = new Map<number, CitationRef>();
+
+  for (const n of citedNumbers(text)) {
     const source = index.get(n);
-    if (source) out.push(source);
+    if (!source) continue;
+    const ref: CitationRef = { display: refs.length + 1, source };
+    refs.push(ref);
+    byNumber.set(n, ref);
   }
-  return out;
+
+  return { refs, byNumber };
 }
 
 /** A stable, pleasant hue for a domain, so its badge is recognisable. */

@@ -7,6 +7,7 @@ import { ToolRegistry, validateArguments } from '../src/registry.js';
 import { createFileTools } from '../src/file-tools.js';
 import { createMemoryTools } from '../src/memory-tools.js';
 import { createBrowserTools } from '../src/browser-tools.js';
+import { allSources, registerSource } from '../src/search-tools.js';
 import { resolveInside } from '../src/file-tools.js';
 import type { ToolContext } from '../src/types.js';
 
@@ -276,5 +277,49 @@ describe('browser tools', () => {
     expect(result.ok).toBe(true);
     expect(sent[0]?.action).toBe('navigate');
     expect(sent[0]?.params.url).toBe('https://example.com');
+  });
+});
+
+describe('web sources', () => {
+  it('numbers a page once, however often it is found', () => {
+    const ctx = makeContext();
+
+    const first = registerSource(ctx.scratch, {
+      url: 'https://www.nasa.gov/webb',
+      title: 'Webb',
+      snippet: 'The telescope',
+    });
+    const again = registerSource(ctx.scratch, { url: 'https://www.nasa.gov/webb' });
+    const other = registerSource(ctx.scratch, { url: 'https://en.wikipedia.org/wiki/JWST' });
+
+    expect(first.n).toBe(1);
+    expect(again.n).toBe(1);
+    expect(other.n).toBe(2);
+  });
+
+  it('records the domain without www and keeps a snippet', () => {
+    const ctx = makeContext();
+    const source = registerSource(ctx.scratch, {
+      url: 'https://www.nasa.gov/webb',
+      title: 'Webb',
+      snippet: 'A space telescope',
+    });
+
+    expect(source.domain).toBe('nasa.gov');
+    expect(source.snippet).toBe('A space telescope');
+  });
+
+  it('falls back to the domain when a page has no title', () => {
+    const ctx = makeContext();
+    const source = registerSource(ctx.scratch, { url: 'https://example.com/a/b' });
+    expect(source.title).toBe('example.com');
+  });
+
+  it('lists sources in citation order', () => {
+    const ctx = makeContext();
+    registerSource(ctx.scratch, { url: 'https://a.example/1' });
+    registerSource(ctx.scratch, { url: 'https://b.example/2' });
+
+    expect(allSources(ctx.scratch).map((source) => source.n)).toEqual([1, 2]);
   });
 });

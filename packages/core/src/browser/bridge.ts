@@ -93,6 +93,10 @@ export class BrowserBridge extends EventEmitter {
 
     for (const client of [...this.clients.values()]) {
       if (now - client.lastSeenAt <= staleAfter) continue;
+      // A worker that is busy running a command is not a dead worker. Killing
+      // it mid-command turns a slow page into a failed task, so wait for the
+      // command's own timeout to decide.
+      if (this.pending.size > 0) continue;
       // No traffic for too long: this socket is dead.
       this.clients.delete(client.id);
       try {

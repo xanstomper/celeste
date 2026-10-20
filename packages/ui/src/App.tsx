@@ -275,6 +275,7 @@ function Workspace() {
               }
               busy={state.busy}
               taskSources={activeTask?.sources}
+              onAsk={(question) => void actions.sendMessage(question)}
             />
           </div>
 

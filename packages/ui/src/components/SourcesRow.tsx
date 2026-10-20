@@ -1,10 +1,11 @@
 import { useState } from 'react';
 
-import type { Source } from '@celeste/protocol';
+import type { CitationRef } from '../lib/citations';
 import { initialsFor, hueFor } from '../lib/citations';
 
 export interface SourcesRowProps {
-  sources: Source[];
+  /** In display order; each carries the number the answer cites it by. */
+  refs: CitationRef[];
 }
 
 /**
@@ -14,20 +15,21 @@ export interface SourcesRowProps {
  * asserted: small numbered chips, one per page, each opening the real source.
  * Expanding one shows its title and snippet.
  */
-export function SourcesRow({ sources }: SourcesRowProps) {
+export function SourcesRow({ refs }: SourcesRowProps) {
   const [open, setOpen] = useState<number | null>(null);
 
-  if (sources.length === 0) return null;
+  if (refs.length === 0) return null;
 
   return (
     <section className="sources" aria-label="Sources">
       <div className="sources__label">
-        <span className="sources__count">{sources.length}</span>
-        {sources.length === 1 ? ' source' : ' sources'}
+        <span className="sources__count">{refs.length}</span>
+        {refs.length === 1 ? ' source' : ' sources'}
       </div>
 
       <div className="sources__list">
-        {sources.map((source) => {
+        {refs.map((ref) => {
+          const source = ref.source;
           const expanded = open === source.n;
           return (
             <div className="source" key={source.n}>
@@ -47,7 +49,7 @@ export function SourcesRow({ sources }: SourcesRowProps) {
                     {initialsFor(source.domain)}
                   </span>
                   <span className="source__domain">{source.domain}</span>
-                  <span className="source__n">{source.n}</span>
+                  <span className="source__n">{ref.display}</span>
                 </a>
                 {source.snippet ? (
                   <button

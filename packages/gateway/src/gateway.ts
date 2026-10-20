@@ -82,9 +82,43 @@ export class ModelGateway {
     return provider;
   }
 
-  /** Sends a chat completion through the active provider. */
+  /**
+   * Sends a chat completion through the active provider.
+   *
+   * Free providers run out of quota, rate-limit, and go down. When the
+   * preferred provider fails with something retryable, the gateway tries the
+   * others rather than failing the task outright: the user wants an answer,
+   * not a particular vendor.
+   */
   async chat(request: ChatRequest, providerId?: string): Promise<ChatResponse> {
-    return this.getProvider(providerId).chat(request);
+    const primary = this.getProvider(providerId);
+
+    try {
+      return await primary.chat(request);
+    } catch (err) {
+      // An upstream outage can surface as anything from a 404 ("no
+      // candidates") to a 502. Only a request the provider rejected as
+      // malformed is worth giving up on: another provider would reject it
+      // the same way.
+      const malformed = err instanceof ProviderError && (err.status === 400 || err.status === 422);
+      if (malformed || request.signal?.aborted) throw err;
+
+      const alternatives = this.listProviders().filter(
+        (cfg) => cfg.id !== primary.config.id,
+      );
+      if (alternatives.length === 0) throw err;
+
+      let lastError: unknown = err;
+      for (const cfg of alternatives) {
+        if (request.signal?.aborted) throw lastError;
+        try {
+          return await this.getProvider(cfg.id).chat(request);
+        } catch (next) {
+          lastError = next;
+        }
+      }
+      throw lastError;
+    }
   }
 
   /** Probes every configured provider concurrently. */

@@ -179,6 +179,8 @@ export interface TaskState {
   artifacts: Artifact[];
   /** Web sources this task has collected, numbered for citation. */
   sources?: Source[];
+  /** Follow-up questions offered under the latest answer. */
+  suggestions?: string[];
   createdAt: number;
   updatedAt: number;
   error?: ToolError;

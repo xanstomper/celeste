@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 
-import { citedNumbers, collectSources, resolveSources } from '../lib/citations';
+import { buildCitations, collectSources } from '../lib/citations';
 import { formatClockTime } from '../lib/format';
 import { Markdown } from '../lib/markdown';
 import { SourcesRow } from './SourcesRow';
+import { Suggestions } from './Suggestions';
 import type { Source } from '@celeste/protocol';
 import type { TimelineItem } from '../state/timeline';
 import { ApprovalCard } from './ApprovalCard';
@@ -21,6 +22,8 @@ export interface TimelineProps {
   busy?: boolean;
   /** Sources the task collected, for threads restored from the daemon. */
   taskSources?: Source[];
+  /** Starts a new turn from a suggested question. */
+  onAsk?: (question: string) => void;
 }
 
 function reduceMotion(): boolean {
@@ -42,6 +45,7 @@ export function Timeline({
   onRespondApproval,
   busy,
   taskSources,
+  onAsk,
 }: TimelineProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(items.length);
@@ -98,7 +102,9 @@ export function Timeline({
             // own — the tool card says everything. Rendering an empty bubble
             // just adds noise.
             if (!isUser && !item.text.trim()) return null;
-            const cited = isUser ? [] : resolveSources(citedNumbers(item.text), sourceIndex);
+            const cites = isUser
+              ? { refs: [], byNumber: new Map() }
+              : buildCitations(item.text, sourceIndex);
             return (
               <div className={`bubble bubble--${isUser ? 'user' : 'assistant'}`} key={item.id}>
                 <div className="bubble__body">
@@ -109,7 +115,7 @@ export function Timeline({
                       <Markdown
                         className="bubble__text bubble__text--prose"
                         content={item.text}
-                        citations={sourceIndex}
+                        citations={cites.byNumber}
                       />
                     )
                   ) : (
@@ -133,8 +139,8 @@ export function Timeline({
                     {formatClockTime(item.at)}
                   </time>
                 </div>
-                {cited.length > 0 && item.id === lastAnswerId ? (
-                  <SourcesRow sources={cited} />
+                {cites.refs.length > 0 && item.id === lastAnswerId ? (
+                  <SourcesRow refs={cites.refs} />
                 ) : null}
               </div>
             );
@@ -180,6 +186,12 @@ export function Timeline({
               </div>
             );
           }
+
+          case 'suggestions':
+            if (!onAsk) return null;
+            return (
+              <Suggestions key={item.id} questions={item.questions} onAsk={onAsk} />
+            );
 
           case 'artifact':
             return <ArtifactCard key={item.id} artifact={item.artifact} />;

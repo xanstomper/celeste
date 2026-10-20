@@ -51,6 +51,13 @@ export interface ToolTimelineItem {
   sources: Source[] | undefined;
 }
 
+export interface SuggestionsTimelineItem {
+  kind: 'suggestions';
+  id: string;
+  at: number;
+  questions: string[];
+}
+
 export interface PlanTimelineItem {
   kind: 'plan';
   id: string;
@@ -100,6 +107,7 @@ export type TimelineItem =
   | MessageTimelineItem
   | ToolTimelineItem
   | PlanTimelineItem
+  | SuggestionsTimelineItem
   | ApprovalTimelineItem
   | HumanTimelineItem
   | ArtifactTimelineItem
@@ -262,6 +270,7 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
   const toolIndex = new Map<string, number>();
   const approvalIndex = new Map<string, number>();
   let planIndex = -1;
+  let suggestionsIndex = -1;
 
   events.forEach((event, index) => {
     const key = `e${index}`;
@@ -295,6 +304,12 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
       }
 
       case 'task.message': {
+        // A new question ends the previous answer's life: its follow-ups no
+        // longer belong anywhere.
+        if (event.message.role === 'user' && suggestionsIndex >= 0) {
+          items.splice(suggestionsIndex, 1);
+          suggestionsIndex = -1;
+        }
         items.push({
           kind: 'message',
           id: key,
@@ -303,6 +318,27 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
           text: extractMessageText(event.message),
           name: event.message.name,
           toolCalls: event.message.toolCalls,
+        });
+        return;
+      }
+
+      case 'task.suggestions': {
+        if (event.suggestions.length === 0) return;
+        if (suggestionsIndex >= 0) {
+          items[suggestionsIndex] = {
+            kind: 'suggestions',
+            id: key,
+            at: event.at,
+            questions: event.suggestions,
+          };
+          return;
+        }
+        suggestionsIndex = items.length;
+        items.push({
+          kind: 'suggestions',
+          id: key,
+          at: event.at,
+          questions: event.suggestions,
         });
         return;
       }
@@ -458,6 +494,14 @@ export function buildTimelineFromTask(task: TaskState): TimelineItem[] {
       artifact,
     });
   });
+  if (task.suggestions && task.suggestions.length > 0) {
+    items.push({
+      kind: 'suggestions',
+      id: 'snapshot-suggestions',
+      at: task.updatedAt,
+      questions: task.suggestions,
+    });
+  }
   if (task.error) {
     items.push({
       kind: 'error',
@@ -515,6 +559,10 @@ export function mergeTimeline(
     streamed.filter((item) => item.kind === 'error').map((item) => `${item.code}:${item.message}`),
   );
 
+  const hasSuggestions = streamed.some((item) => item.kind === 'suggestions');
+  // Follow-up questions are a footer, not history: they always come last.
+  const snapshotSuggestions = snapshot.filter((item) => item.kind === 'suggestions');
+
   const extras = snapshot.filter((item) => {
     if (item.kind === 'plan') return !hasPlan;
     if (item.kind === 'artifact') return !artifactPaths.has(item.artifact.path);
@@ -523,5 +571,9 @@ export function mergeTimeline(
     return false;
   });
 
-  return [...extras, ...streamed];
+  return [
+    ...extras,
+    ...streamed,
+    ...(hasSuggestions ? [] : snapshotSuggestions),
+  ];
 }
