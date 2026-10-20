@@ -15,6 +15,7 @@ import type {
   DaemonEvent,
   HealthResponse,
   ProviderSummary,
+  SearchFocus,
   TaskState,
 } from '@celeste/protocol';
 
@@ -73,7 +74,7 @@ export interface CelesteState {
 
 export interface CelesteActions {
   selectSession: (id: string) => void;
-  createSession: (prompt: string) => Promise<void>;
+  createSession: (prompt: string, focus?: SearchFocus) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   respondApproval: (requestId: string, decision: 'approve' | 'deny') => Promise<void>;
   cancelTask: () => Promise<void>;

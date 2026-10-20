@@ -1613,6 +1613,49 @@ button.provider:hover:not(:disabled) {
   gap: 6px;
 }
 
+/* Focus modes: the three places research can look. */
+.focus {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px 2px;
+}
+
+.focus__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 27px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.focus__chip:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.focus__chip--active {
+  background: var(--accent-soft);
+  border-color: var(--border-accent);
+  color: var(--accent);
+}
+
+.focus__chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .composer__shell {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);

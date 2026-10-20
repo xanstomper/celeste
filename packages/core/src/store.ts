@@ -29,11 +29,12 @@ export class TaskStore {
     return [...this.tasks.values()].sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  create(title: string): TaskState {
+  create(title: string, focus?: TaskState['focus']): TaskState {
     const now = Date.now();
     const task: TaskState = {
       id: createId('task'),
       title,
+      ...(focus && focus !== 'web' ? { focus } : {}),
       status: 'queued',
       plan: [],
       messages: [],

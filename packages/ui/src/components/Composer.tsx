@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { ProviderSummary } from '@celeste/protocol';
+import type { ProviderSummary, SearchFocus } from '@celeste/protocol';
 
+import { FocusPicker } from './FocusPicker';
 import { Icon } from './Icon';
 import { ProviderPicker } from './ProviderPicker';
 
@@ -11,6 +12,9 @@ export interface ComposerProps {
   onProviderChange: (id: string) => void;
   autoApprove: boolean;
   onAutoApproveChange: (value: boolean) => void;
+  /** Where a new task should research. */
+  focus?: SearchFocus;
+  onFocusChange?: (focus: SearchFocus) => void;
   onSend: (content: string) => void | Promise<void>;
   busy?: boolean;
   hasSession: boolean;
@@ -36,6 +40,8 @@ export function Composer({
   onProviderChange,
   autoApprove,
   onAutoApproveChange,
+  focus = 'web',
+  onFocusChange,
   onSend,
   busy = false,
   hasSession,
@@ -80,6 +86,10 @@ export function Composer({
 
   return (
     <div className="composer">
+      {startingNew && onFocusChange ? (
+        <FocusPicker value={focus} onChange={onFocusChange} disabled={busy} />
+      ) : null}
+
       <div className="composer__shell">
         <textarea
           ref={textareaRef}

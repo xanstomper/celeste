@@ -11,6 +11,7 @@ import type {
   ApprovalRequest,
   ChatMessage,
   PlanStep,
+  SearchFocus,
   Source,
   TaskState,
   TaskStatus,
@@ -99,6 +100,8 @@ export interface ProviderSummary {
 
 export interface CreateSessionRequest {
   prompt: string;
+  /** Where to research: the open web, papers, or the news. */
+  focus?: SearchFocus;
   /** Optional override of the active provider for this session only. */
   providerId?: string;
   /** Approval policy for risky tools. */

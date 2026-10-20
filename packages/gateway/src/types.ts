@@ -107,17 +107,25 @@ export class ProviderError extends Error {
   readonly providerId: string;
   readonly status?: number;
   readonly retryable: boolean;
+  /**
+   * How long the provider asked us to wait, when it said so.
+   *
+   * Free tiers answer 402/429 with "Retry after 14s". Honouring that is the
+   * difference between a task that completes slowly and one that fails.
+   */
+  readonly retryAfterMs?: number;
 
   constructor(
     providerId: string,
     message: string,
-    options: { status?: number; retryable?: boolean; cause?: unknown } = {},
+    options: { status?: number; retryable?: boolean; retryAfterMs?: number; cause?: unknown } = {},
   ) {
     super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'ProviderError';
     this.providerId = providerId;
     this.status = options.status;
     this.retryable = options.retryable ?? false;
+    this.retryAfterMs = options.retryAfterMs;
   }
 }
 

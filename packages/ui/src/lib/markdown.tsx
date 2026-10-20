@@ -13,6 +13,7 @@ import type { CitationRef } from './citations';
 
 type Block =
   | { kind: 'p'; text: string }
+  | { kind: 'heading'; level: number; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
   | { kind: 'quote'; text: string }
@@ -46,6 +47,15 @@ export function parseBlocks(source: string): Block[] {
     // Horizontal rule.
     if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
       blocks.push({ kind: 'hr' });
+      index++;
+      continue;
+    }
+
+    // Heading. Models lean on these heavily; rendering them as paragraphs
+    // left literal "##" in the middle of answers.
+    const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (heading) {
+      blocks.push({ kind: 'heading', level: heading[1]!.length, text: heading[2]! });
       index++;
       continue;
     }
@@ -95,7 +105,7 @@ export function parseBlocks(source: string): Block[] {
       const current = lines[index] ?? '';
       if (
         !current.trim() ||
-        /^\s*(```|>|[-*+]\s|\d+[.)]\s)/.test(current)
+        /^\s*(```|>|[-*+]\s|\d+[.)]\s|#{1,6}\s)/.test(current)
       ) {
         break;
       }
@@ -237,6 +247,28 @@ export function Markdown({ content, className, citations }: MarkdownProps): Reac
                 {renderInline(block.text, key, citations)}
               </p>
             );
+          case 'heading': {
+            const content = renderInline(block.text, key, citations);
+            if (block.level === 1) {
+              return (
+                <h1 className="md__h1" key={key}>
+                  {content}
+                </h1>
+              );
+            }
+            if (block.level === 2) {
+              return (
+                <h2 className="md__h2" key={key}>
+                  {content}
+                </h2>
+              );
+            }
+            return (
+              <h3 className="md__h3" key={key}>
+                {content}
+              </h3>
+            );
+          }
           case 'ul':
             return (
               <ul className="md__ul" key={key}>

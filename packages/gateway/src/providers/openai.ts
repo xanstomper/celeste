@@ -22,6 +22,29 @@ interface OpenAiResponse {
   error?: { message?: string; type?: string };
 }
 
+/**
+ * Reads a "retry after Ns" hint out of an error body.
+ *
+ * Free tiers word this differently — "Retry after 14s", "try again in 30
+ * seconds" — and only the number matters. Returns milliseconds, or undefined
+ * when there is no usable hint (or it asks for an unreasonable wait).
+ */
+export function parseRetryAfter(detail: string): number | undefined {
+  const match = /(?:retry|try again)\s*(?:after|in)?\s*(\d+(?:\.\d+)?)\s*(ms|s|secs?|seconds?|mins?|minutes?)?/i.exec(
+    detail,
+  );
+  if (!match) return undefined;
+
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+
+  const unit = (match[2] ?? 's').toLowerCase();
+  const seconds = unit === 'ms' ? value / 1000 : unit.startsWith('m') ? value * 60 : value;
+  const ms = Math.round(seconds * 1000);
+
+  return ms > 0 && ms <= 120_000 ? ms : undefined;
+}
+
 const DEFAULT_BASE_URL: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
   'openai-compatible': 'http://localhost:8080/v1',
@@ -76,10 +99,22 @@ export class OpenAiCompatibleProvider implements ModelProvider {
       });
       if (!response.ok) {
         const detail = this.extractError(response.text);
+
+        // "Retry after 14s" is an instruction, not a refusal. Free tiers use
+        // it constantly; waiting once is far better than failing the task.
+        const retryAfterMs = parseRetryAfter(detail);
+        const rateLimited = response.status === 402 || response.status === 429;
         throw new ProviderError(
           this.config.id,
           `${this.config.label} (${this.config.model}) request failed [${response.status}]: ${detail}`,
-          { status: response.status, retryable: response.status === 429 || response.status >= 500 },
+          {
+            status: response.status,
+            retryable:
+              response.status >= 500 ||
+              response.status === 429 ||
+              (rateLimited && retryAfterMs !== undefined),
+            ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+          },
         );
       }
       return response;

@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { AnthropicProvider } from '../src/providers/anthropic.js';
 import { OllamaProvider } from '../src/providers/ollama.js';
-import { OpenAiCompatibleProvider } from '../src/providers/openai.js';
+import { OpenAiCompatibleProvider, parseRetryAfter } from '../src/providers/openai.js';
 import { GoogleProvider } from '../src/providers/google.js';
 import { ModelGateway } from '../src/gateway.js';
 import { loadConfig, discoverEnvProviders } from '../src/config.js';
@@ -49,6 +49,24 @@ function mockApi(response: unknown, status = 200) {
     },
   };
 }
+
+describe('parseRetryAfter', () => {
+  it('reads the wait from the ways providers word it', () => {
+    expect(
+      parseRetryAfter(
+        'Free limit reached: 1 reply every 30 seconds per IP. Retry after 17s, or get unlimited replies',
+      ),
+    ).toBe(17_000);
+    expect(parseRetryAfter('try again in 30 seconds')).toBe(30_000);
+    expect(parseRetryAfter('Retry after 1.5s')).toBe(1_500);
+    expect(parseRetryAfter('Retry after 2 minutes')).toBe(120_000);
+  });
+
+  it('ignores a wait that is too long to be useful', () => {
+    expect(parseRetryAfter('Retry after 10 minutes')).toBeUndefined();
+    expect(parseRetryAfter('quota exceeded')).toBeUndefined();
+  });
+});
 
 describe('OpenAiCompatibleProvider', () => {
   it('normalises a tool-calling response', async () => {

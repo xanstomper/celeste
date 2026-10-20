@@ -6,10 +6,17 @@ import type { ToolRegistry, ToolContext } from '@celeste/tools';
 import type { BrowserClient } from '@celeste/tools';
 import type { EventBus } from '../events.js';
 import type { TaskStore } from '../store.js';
+import { cleanAnswer } from './answer.js';
 import type { ApprovalManager } from './approval.js';
 import type { SessionGuard } from '../browser/session-guard.js';
 import { assessRisk, buildInjectionWarning, neutraliseUntrustedText } from './guardrails.js';
-import { buildTurnContext, COMPACT_SYSTEM_PROMPT, PLANNER_SYSTEM_PROMPT, SYSTEM_PROMPT } from './prompts.js';
+import {
+  buildTurnContext,
+  COMPACT_SYSTEM_PROMPT,
+  focusGuidance,
+  PLANNER_SYSTEM_PROMPT,
+  SYSTEM_PROMPT,
+} from './prompts.js';
 
 export interface AgentRunOptions {
   /** Override the provider for this run only. */
@@ -223,15 +230,24 @@ export class Agent {
         run.providerId,
       );
 
-      this.options.store.appendMessage(taskId, response.message);
+      const toolCalls = response.toolCalls ?? [];
+
+      // Only the final message is the answer the user reads; earlier
+      // assistant turns are working notes that carry tool calls. Tidy just
+      // the answer, so its text and its streamed event agree.
+      const message =
+        toolCalls.length === 0 && typeof response.message.content === 'string'
+          ? { ...response.message, content: cleanAnswer(response.message.content) }
+          : response.message;
+
+      this.options.store.appendMessage(taskId, message);
       this.options.bus.publish({
         type: 'task.message',
         taskId,
-        message: response.message,
+        message,
         at: Date.now(),
       });
 
-      const toolCalls = response.toolCalls ?? [];
       if (toolCalls.length === 0) {
         // The model finished. Mark the plan done and stop.
         this.completePlan(taskId);
@@ -522,8 +538,10 @@ export class Agent {
       outputDir: this.options.outputDir,
     });
 
+    const guidance = focusGuidance(task.focus);
     const messages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
+      ...(guidance ? [{ role: 'system' as const, content: guidance }] : []),
       ...task.messages,
     ];
 

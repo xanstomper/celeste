@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import type { DaemonEvent } from '@celeste/protocol';
+import type { DaemonEvent, SearchFocus } from '@celeste/protocol';
 
 import { EventDeduper, useGlobalEvents, useSessionEvents } from '../api/events';
 import { readEnvApiBase, toApiError } from '../api/client';
@@ -163,7 +163,7 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createSession = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, focus?: SearchFocus) => {
       const current = transportRef.current;
       if (!current) return;
       const trimmed = prompt.trim();
@@ -172,6 +172,7 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       try {
         const task = await current.createSession({
           prompt: trimmed,
+          ...(focus && focus !== 'web' ? { focus } : {}),
           autoApprove: stateRef.current.settings.autoApprove,
           outputDir: stateRef.current.settings.outputDir,
         });

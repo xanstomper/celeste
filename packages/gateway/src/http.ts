@@ -95,7 +95,14 @@ export async function withRetry<T>(
       lastError = err;
       const retryable = err instanceof ProviderError ? err.retryable : false;
       if (!retryable || attempt === attempts - 1) break;
-      const delay = baseDelay * 2 ** attempt + Math.random() * 250;
+
+      // A provider that tells us when to come back is more useful than one
+      // that just refuses. Cap the wait: a task should not hang for minutes.
+      const requested = err instanceof ProviderError ? err.retryAfterMs : undefined;
+      const delay =
+        requested !== undefined
+          ? Math.min(requested + 250, 45_000)
+          : baseDelay * 2 ** attempt + Math.random() * 250;
       await sleep(delay, options.signal);
     }
   }

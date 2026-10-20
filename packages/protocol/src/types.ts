@@ -162,6 +162,15 @@ export type TaskStatus =
   | 'cancelled';
 
 /**
+ * What kind of sources the user is after.
+ *
+ * Perplexity calls these "focus modes": the answer is written the same way,
+ * but the research looks in different places. `academic` adds papers,
+ * `news` adds dated headlines, `web` is the open web only.
+ */
+export type SearchFocus = 'web' | 'academic' | 'news';
+
+/**
  * A long-running unit of work. Checkpoints allow a task to resume after a
  * crash, a model switch, or a browser session reload.
  */
@@ -169,6 +178,8 @@ export interface TaskState {
   id: string;
   title: string;
   status: TaskStatus;
+  /** Where this task researches. Absent means `web`. */
+  focus?: SearchFocus;
   /** Ordered list of planned steps produced by the planner. */
   plan: PlanStep[];
   /** Transcript of the conversation so far. */

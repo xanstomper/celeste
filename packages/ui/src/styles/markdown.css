@@ -21,6 +21,29 @@
   margin: 0 0 10px;
 }
 
+/* Headings: Perplexity's answers lean on them, so they carry real weight. */
+.md__h1,
+.md__h2,
+.md__h3 {
+  margin: 18px 0 8px;
+  line-height: 1.28;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.md__h1 {
+  font-size: 1.32em;
+}
+
+.md__h2 {
+  font-size: 1.16em;
+}
+
+.md__h3 {
+  font-size: 1.02em;
+  color: var(--text-dim);
+}
+
 .md__ul,
 .md__ol {
   margin: 0 0 10px;

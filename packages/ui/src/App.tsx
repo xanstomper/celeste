@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { SearchFocus } from '@celeste/protocol';
 
 import { CommandPalette } from './components/CommandPalette';
 import type { PaletteAction } from './components/CommandPalette';
@@ -35,6 +36,7 @@ function Workspace() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [composerMode, setComposerMode] = useState<'reply' | 'new'>('reply');
+  const [focus, setFocus] = useState<SearchFocus>('web');
   const [focusComposerToken, setFocusComposerToken] = useState(0);
   const narrow = useMediaQuery('(max-width: 900px)');
   const [sidebarOpen, setSidebarOpen] = useState(!narrow);
@@ -102,13 +104,13 @@ function Workspace() {
   const handleSend = useCallback(
     async (content: string) => {
       if (composerMode === 'new' || !state.activeSessionId) {
-        await actions.createSession(content);
+        await actions.createSession(content, focus);
         setComposerMode('reply');
         return;
       }
       await actions.sendMessage(content);
     },
-    [actions, composerMode, state.activeSessionId],
+    [actions, composerMode, focus, state.activeSessionId],
   );
 
   const paletteActions = useMemo<PaletteAction[]>(
@@ -286,6 +288,8 @@ function Workspace() {
               onProviderChange={(id) => void actions.switchProvider(id)}
               autoApprove={state.settings.autoApprove}
               onAutoApproveChange={(value) => actions.setSettings({ autoApprove: value })}
+              focus={focus}
+              onFocusChange={setFocus}
               onSend={handleSend}
               busy={state.busy}
               hasSession={state.activeSessionId !== null && composerMode === 'reply'}

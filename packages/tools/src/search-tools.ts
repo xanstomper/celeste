@@ -1,4 +1,5 @@
 import type { Source, ToolDefinition } from '@celeste/protocol';
+import { focusResults } from './focus-sources.js';
 import type { ScratchStore, ToolHandler, ToolOutcome } from './types.js';
 
 /**
@@ -13,6 +14,17 @@ import type { ScratchStore, ToolHandler, ToolOutcome } from './types.js';
  */
 
 const SOURCES_KEY = 'celeste.web.sources';
+const SEARCH_COUNT_KEY = 'celeste.web.searches';
+
+/**
+ * How many searches one task may run.
+ *
+ * The prompt asks for one search and at most three pages, and small models
+ * routinely ignore it: they rephrase the same question, get the same eight
+ * sources, and search again. A hard cap turns that loop into an answer. It is
+ * deliberately generous — a comparison or a contested fact can need four.
+ */
+const MAX_SEARCHES = 5;
 
 function def(
   name: string,
@@ -94,6 +106,8 @@ function formatForModel(query: string, sources: Source[]): string {
 export interface SearchToolOptions {
   /** Default engine. */
   engine?: 'bing' | 'duckduckgo' | 'brave' | 'google';
+  /** Injectable feed lookup for the focus modes, so tests stay offline. */
+  focusFeed?: typeof focusResults;
 }
 
 export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[] {
@@ -101,6 +115,7 @@ export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[
   // "helpful" rewrite of a long query into its first word. Bing is kept as
   // the fallback, which the extension switches to automatically.
   const defaultEngine = options.engine ?? 'duckduckgo';
+  const focusFeed = options.focusFeed ?? focusResults;
 
   const webSearch: ToolHandler = {
     definition: def(
@@ -114,11 +129,6 @@ export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[
             type: 'integer',
             description: 'How many results to return (1-15). Default 8.',
             default: 8,
-          },
-          engine: {
-            type: 'string',
-            enum: ['bing', 'duckduckgo', 'brave', 'google'],
-            description: 'Which search engine to use. Defaults to the configured one.',
           },
         },
         required: ['query'],
@@ -147,12 +157,28 @@ export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[
         } satisfies ToolOutcome;
       }
 
+      // Research has to end. Without a cap the agent keeps rephrasing the
+      // same query and never writes the answer.
+      const searches = ctx.scratch.get<number>(SEARCH_COUNT_KEY) ?? 0;
+      if (searches >= MAX_SEARCHES) {
+        const known = allSources(ctx.scratch);
+        return {
+          ok: true,
+          summary: `Search budget reached (${MAX_SEARCHES})`,
+          data: { budgetExhausted: true, results: known },
+          text:
+            `You have already searched ${MAX_SEARCHES} times. Do not search again. ` +
+            `Answer now using the ${known.length} sources you have` +
+            (known.length > 0 ? ` (numbered [1] to [${known.length}])` : '') +
+            '. If they do not answer the question, say plainly what is missing.',
+        } satisfies ToolOutcome;
+      }
+
       const limit = Math.min(Math.max(Number(args['limit'] ?? 8) || 8, 1), 15);
-      const engine = (typeof args['engine'] === 'string' ? args['engine'] : defaultEngine) as
-        | 'bing'
-        | 'duckduckgo'
-        | 'brave'
-        | 'google';
+      // The engine is ours to choose: the extension falls back automatically
+      // when one returns nothing, and a model that picks "google scholar"
+      // only burns a step on a validation error.
+      const engine = defaultEngine;
 
       try {
         const response = await ctx.browser.send<{
@@ -162,7 +188,24 @@ export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[
           results: Array<{ rank: number; title: string; url: string; domain: string; snippet: string }>;
         }>('search', { query, limit, engine }, { timeoutMs: 45_000 });
 
-        const sources = (response.results ?? []).map((result) =>
+        // Focus modes put their own feed on top of the open-web results:
+        // papers for Academic, dated headlines for News. Best-effort, so a
+        // feed that is down costs nothing but the extra sources.
+        const focus = ctx.store.get(ctx.taskId)?.focus;
+        const extra = await focusFeed(focus, query, Math.min(limit, 4));
+
+        const seen = new Set<string>();
+        const merged = [...extra, ...(response.results ?? [])]
+          .filter((result) => {
+            if (seen.has(result.url)) return false;
+            seen.add(result.url);
+            return true;
+          })
+          .slice(0, limit);
+
+        ctx.scratch.set(SEARCH_COUNT_KEY, searches + 1);
+
+        const sources = merged.map((result) =>
           registerSource(ctx.scratch, {
             url: result.url,
             title: result.title,
@@ -170,13 +213,22 @@ export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[
           }),
         );
 
+        const extraUrls = new Set(extra.map((result) => result.url));
+        const extraCount = sources.filter((source) => extraUrls.has(source.url)).length;
+        const extraLabel =
+          extraCount === 0
+            ? ''
+            : focus === 'academic'
+              ? ` (${extraCount} papers)`
+              : ` (${extraCount} headlines)`;
+
         return {
           ok: true,
           summary:
             sources.length === 0
               ? `No results for "${query}"`
-              : `Found ${sources.length} sources for "${query}"`,
-          data: { engine: response.engine, query, results: sources },
+              : `Found ${sources.length} sources${extraLabel} for "${query}"`,
+          data: { engine: response.engine, query, focus: focus ?? 'web', results: sources },
           text: formatForModel(query, sources),
           sources,
         };

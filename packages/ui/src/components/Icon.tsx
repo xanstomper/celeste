@@ -27,6 +27,9 @@ export type IconName =
   | 'sparkle'
   | 'settings'
   | 'search'
+  | 'globe'
+  | 'book'
+  | 'news'
   | 'copy'
   | 'sun'
   | 'moon'
@@ -137,6 +140,27 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
+    </>
+  ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <ellipse cx="12" cy="12" rx="4" ry="9" />
+    </>
+  ),
+  book: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5Z" />
+      <path d="M4 20.5V5.5" />
+      <path d="M8 7h7" />
+    </>
+  ),
+  news: (
+    <>
+      <path d="M4 5h13v14H6a2 2 0 0 1-2-2Z" />
+      <path d="M17 8h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2" />
+      <path d="M7 8h6M7 11h6M7 14h4" />
     </>
   ),
   copy: (

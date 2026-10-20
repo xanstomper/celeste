@@ -229,7 +229,9 @@ export class Daemon {
     const prompt = String(body.prompt ?? '').trim();
     if (!prompt) throw new Error('A prompt is required.');
 
-    const task = this.options.store.create(prompt.slice(0, 120));
+    // Only the modes we know how to research; anything else is the open web.
+    const focus = body.focus === 'academic' || body.focus === 'news' ? body.focus : undefined;
+    const task = this.options.store.create(prompt.slice(0, 120), focus);
     this.options.store.appendMessage(task.id, { role: 'user', content: prompt });
     this.options.bus.publish({
       type: 'task.created',
@@ -438,11 +440,45 @@ function messageText(message: ChatMessage): string {
 }
 
 /** Pulls up to three question-shaped lines out of a model reply. */
-function parseSuggestions(message: ChatMessage): string[] {
-  return messageText(message)
+const QUESTION_START =
+  /^(?:what|why|how|when|where|who|which|whose|can|could|does|did|is|are|was|were|should|would|will|has|have)\b/i;
+
+/**
+ * Pulls three follow-up questions out of whatever the model produced.
+ *
+ * Models answer this prompt in three different shapes: a bare list, a JSON
+ * array, or sentences that are questions without the question mark. All three
+ * are accepted — a missing "?" is a typographic detail, not a reason to show
+ * the reader nothing.
+ */
+export function parseSuggestions(message: ChatMessage): string[] {
+  const raw = messageText(message).trim();
+
+  // Some models wrap the list in JSON despite being asked not to.
+  const json = /\[[\s\S]*\]/.exec(raw);
+  if (json) {
+    try {
+      const parsed: unknown = JSON.parse(json[0]);
+      if (Array.isArray(parsed)) {
+        const questions = parsed
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim())
+          .filter((item) => item.length >= 12 && item.length <= 160)
+          .map((item) => (item.endsWith('?') ? item : `${item}?`))
+          .slice(0, 3);
+        if (questions.length > 0) return questions;
+      }
+    } catch {
+      // Not JSON after all; fall through to the line parser.
+    }
+  }
+
+  return raw
     .split('\n')
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
     .map((line) => line.replace(/^["'“”]+|["'“”]+$/g, '').trim())
-    .filter((line) => line.length >= 12 && line.length <= 160 && line.includes('?'))
+    .filter((line) => line.length >= 12 && line.length <= 160)
+    .map((line) => (line.endsWith('?') ? line : QUESTION_START.test(line) ? `${line}?` : line))
+    .filter((line) => line.includes('?'))
     .slice(0, 3);
 }
