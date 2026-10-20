@@ -81,19 +81,19 @@ function inject(): void {
   button.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    // `chrome.sidePanel.open()` demands a user gesture, and a gesture does
-    // not cross from a content script into the service worker. Opening the
-    // extension's own page carries the gesture across: that page opens the
-    // panel and immediately closes itself.
+
+    // Ask the daemon to work on this page. The request travels over the
+    // bridge the extension already holds open, so the agent picks it up
+    // straight away and you watch it happen in the side panel.
     try {
-      const url = chrome.runtime.getURL('openpanel.html');
-      const opened = window.open(url, 'celeste-panel', 'width=240,height=160,left=-10000,top=-10000');
-      if (!opened) {
-        // Popup blocked — fall back to the background worker.
-        chrome.runtime.sendMessage({ type: 'celeste:open-panel' }, () => {
-          void chrome.runtime.lastError;
-        });
-      }
+      chrome.runtime.sendMessage(
+        {
+          type: 'celeste:ask',
+          url: location.href,
+          title: document.title,
+        },
+        () => void chrome.runtime.lastError,
+      );
     } catch {
       /* ignore */
     }

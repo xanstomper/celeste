@@ -268,12 +268,48 @@ interface RuntimeMessage {
   port?: number;
   entry?: NetworkEntry;
   console?: ConsoleEntry;
+  /** Page URL for the in-page "Ask" button. */
+  url?: string;
+  /** Page title for the in-page "Ask" button. */
+  title?: string;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const msg = (message ?? {}) as RuntimeMessage;
 
   switch (msg.type) {
+    case 'celeste:ask': {
+      // The page's "Ask" button: hand the request to the daemon over the
+      // bridge and bring the agent panel forward if we can.
+      void (async () => {
+        const url = String(msg.url ?? '');
+        const title = String(msg.title ?? '');
+        const prompt = `Analyse the page currently open in the browser at ${url}${
+          title ? ` ("${title}")` : ''
+        }. Summarise what it says, extract the key facts, and tell me what it is about.`;
+
+        const request = encodeClientMessage({
+          v: PROTOCOL_VERSION,
+          type: 'task.request',
+          payload: { prompt, url, title },
+        });
+        if (!bridge.send(request)) enqueue(request);
+
+        // Try to bring the panel forward. It usually already has the gesture.
+        try {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          const windowId = tabs[0]?.windowId;
+          if (typeof windowId === 'number') {
+            await chrome.sidePanel.open({ windowId });
+          }
+        } catch {
+          /* the user can click the toolbar icon */
+        }
+        sendResponse({ ok: true });
+      })();
+      return true;
+    }
+
     case 'celeste:open-panel': {
       // Triggered by the in-page "Ask" button. The click is a user gesture,
       // so the side panel can be opened without the user hunting for the

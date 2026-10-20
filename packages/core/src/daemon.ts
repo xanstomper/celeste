@@ -87,6 +87,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   });
 
   const sessionGuard = new SessionGuard();
+
   bridge.on('debug', (detail) => {
     bus.publish({
       type: 'log',
@@ -128,6 +129,31 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   });
 
   const approvals = new ApprovalManager(bus);
+
+  // The page's "Ask" button asks the daemon to start working on the current
+  // page. It arrives over the same bridge the browser commands use, so no
+  // knowledge of the daemon's HTTP port is needed.
+  bridge.on('task-request', (payload: { prompt?: string; url?: string; title?: string }) => {
+    const prompt = String(payload.prompt ?? '').trim();
+    if (!prompt) return;
+
+    const task = store.create(prompt.slice(0, 120));
+    store.appendMessage(task.id, { role: 'user', content: prompt });
+    bus.publish({
+      type: 'task.created',
+      taskId: task.id,
+      title: task.title,
+      at: Date.now(),
+    });
+    void agent.run(task.id).catch((err) => {
+      bus.publish({
+        type: 'log',
+        level: 'error',
+        message: `Task ${task.id} crashed: ${err instanceof Error ? err.message : String(err)}`,
+        at: Date.now(),
+      });
+    });
+  });
 
   const agent = new Agent({
     gateway,

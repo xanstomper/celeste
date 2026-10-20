@@ -284,6 +284,7 @@ export type ClientMessageType =
   | 'browser.command'
   | 'browser.result'
   | 'event'
+  | 'task.request'
   | 'ping';
 
 export type ServerMessageType =

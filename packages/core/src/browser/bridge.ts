@@ -313,6 +313,13 @@ export class BrowserBridge extends EventEmitter {
         break;
       }
 
+      case 'task.request': {
+        // The page's "Ask" button asked for work to be started.
+        const payload = (message.payload ?? {}) as { prompt?: string; url?: string };
+        this.emit('task-request', payload);
+        break;
+      }
+
       case 'ping': {
         this.sendRaw({ v: PROTOCOL_VERSION, type: 'pong', payload: { at: Date.now() } });
         break;
