@@ -27,6 +27,50 @@ export const DEFAULT_CONFIG_PATHS = [
   path.join(homedir(), '.celeste', 'config.json'),
 ];
 
+/**
+ * Env files that are loaded before the configuration is resolved, so provider
+ * keys do not have to be exported in the shell that happens to launch the
+ * daemon. Existing environment variables always win.
+ */
+export const DEFAULT_ENV_PATHS = [
+  path.join(homedir(), '.celeste', '.env'),
+  path.join(homedir(), '.hermes', '.env'),
+];
+
+/**
+ * Loads `KEY=value` pairs from env files into `process.env`.
+ * Values already present in the environment are never overwritten.
+ */
+export function loadEnvFiles(paths: string[] = DEFAULT_ENV_PATHS): string[] {
+  const loaded: string[] = [];
+  for (const file of paths) {
+    let raw: string;
+    try {
+      raw = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const line of raw.split('\n')) {
+      const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!match) continue;
+      const key = match[1]!;
+      let value = (match[2] ?? '').trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (!value) continue;
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+      loaded.push(`${file}:${key}`);
+    }
+  }
+  return loaded;
+}
+
 export const DEFAULT_OUTPUT_DIR = path.join(homedir(), 'Documents', 'Celeste');
 export const DEFAULT_DATA_DIR = path.join(homedir(), '.celeste', 'data');
 export const DEFAULT_BRIDGE_PORT = 9223;
@@ -137,6 +181,8 @@ function readJsonFile(file: string): CelesteConfig | null {
  * providers implied by environment variables.
  */
 export async function loadConfig(explicitPath?: string): Promise<CelesteConfig> {
+  loadEnvFiles();
+
   const candidates = explicitPath ? [explicitPath] : DEFAULT_CONFIG_PATHS;
   let fileConfig: CelesteConfig = { providers: [] };
 

@@ -17,6 +17,14 @@ import type { BridgeEvent, BridgeOptions, BridgeState } from './types.js';
 
 const DEFAULT_PATH = '/extension';
 const DEFAULT_HEARTBEAT_MS = 15_000;
+/**
+ * Identifies this service-worker instance. If the daemon sees the id change
+ * between connections, the worker was evicted and restarted rather than the
+ * socket merely dropping.
+ */
+const WORKER_INSTANCE_ID = Math.random().toString(36).slice(2, 10);
+
+export { WORKER_INSTANCE_ID };
 const MAX_BACKOFF_MS = 30_000;
 const BASE_BACKOFF_MS = 500;
 /** Force a reconnect if the socket has been silent for this long. */
@@ -28,6 +36,9 @@ export class Bridge {
   private connectedAt: number | undefined;
   private lastError: string | undefined;
   private latencyMs: number | undefined;
+  private connecting = false;
+  /** Stack of the most recent connect() call, for diagnosing loops. */
+  private lastConnectStack = '';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private stopped = true;
@@ -52,6 +63,11 @@ export class Bridge {
       ...(this.lastError !== undefined ? { lastError: this.lastError } : {}),
       ...(this.latencyMs !== undefined ? { latencyMs: this.latencyMs } : {}),
     };
+  }
+
+  /** The stack of the most recent connect() call, for diagnosing loops. */
+  getConnectStack(): string {
+    return this.lastConnectStack;
   }
 
   /** Starts (or restarts) the connection loop. */
@@ -83,6 +99,10 @@ export class Bridge {
       await this.start();
       return;
     }
+    // Guard against overlapping attempts: a socket that is still handshaking
+    // counts as "already connecting". Without this, two callers can each open
+    // a socket, and the loser closes the winner mid-handshake.
+    if (this.connecting) return;
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -118,8 +138,20 @@ export class Bridge {
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
+    if (this.connecting) return;
+    this.connecting = true;
     this.clearReconnectTimer();
+    // Captured so a connection loop can be traced to its caller.
+    this.lastConnectStack = new Error('connect()').stack ?? '';
 
+    try {
+      await this.doConnect();
+    } finally {
+      this.connecting = false;
+    }
+  }
+
+  private async doConnect(): Promise<void> {
     let port = 0;
     try {
       port = await this.options.getPort();
@@ -154,8 +186,19 @@ export class Bridge {
       return;
     }
 
-    this.socket = socket;
+    // Retire a socket that is still established. A socket that is merely
+    // handshaking is left alone: closing it mid-handshake produces a noisy
+    // "closed before the connection is established" failure.
+    const previous = this.socket;
+    if (previous && previous !== socket && previous.readyState === WebSocket.OPEN) {
+      try {
+        previous.close(1000, 'superseded');
+      } catch {
+        /* ignore */
+      }
+    }
 
+    this.socket = socket;
     socket.onopen = () => {
       this.attempts = 0;
       this.connectedAt = Date.now();
@@ -178,12 +221,21 @@ export class Bridge {
       this.lastError = 'websocket error';
       this.status = 'error';
       this.emitState();
-      this.options.onEvent({ type: 'error', message: 'websocket error' });
+      this.options.onEvent({
+        type: 'error',
+        message: `websocket error (${this.lastError}) url=${url} attempts=${this.attempts} state=${this.getState().status}`,
+      });
     };
 
     socket.onclose = (event: CloseEvent) => {
+      // A *superseded* socket closing must not disturb the live one. The
+      // daemon replaces the old socket when the service worker restarts, and
+      // reacting to that close by reconnecting would start a loop: new socket
+      // -> old terminated -> old closes -> reconnect -> ...
+      if (this.socket !== socket) return;
+
       this.clearHeartbeat();
-      if (this.socket === socket) this.socket = null;
+      this.socket = null;
       this.status = 'disconnected';
       this.emitState();
       this.options.onEvent({

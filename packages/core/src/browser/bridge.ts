@@ -17,11 +17,31 @@ interface Pending {
   action: string;
 }
 
+/**
+ * A connected extension.
+ *
+ * More than one can be alive: the user may have several browser windows, or
+ * a stale instance may still be shutting down. Only one of them serves
+ * commands at a time — the one seen most recently — but the others are never
+ * terminated, because doing so makes them reconnect and starts a storm.
+ */
+interface Client {
+  id: string;
+  socket: WebSocket;
+  lastSeenAt: number;
+  connectedAt: number;
+  workerId?: string;
+}
+
 export interface BridgeOptions {
   port: number;
   host?: string;
   /** Default timeout for a browser command. */
   timeoutMs?: number;
+  /** How often to ping the extension. */
+  heartbeatMs?: number;
+  /** How long the extension may stay silent before the socket is dropped. */
+  heartbeatTimeoutMs?: number;
 }
 
 export interface BrowserClientInfo {
@@ -45,24 +65,75 @@ export class BrowserBridge extends EventEmitter {
   private client: WebSocket | null = null;
   private clientId: string | null = null;
   private readonly pending = new Map<string, Pending>();
+  private readonly clients = new Map<string, Client>();
+  private activeId: string | undefined;
+  private readonly heartbeat: NodeJS.Timeout;
   private connectedAt = 0;
   private lastSeenAt = 0;
   private clientMeta: { version?: string; userAgent?: string } = {};
+  /** Identifies the extension's service-worker instance. */
+  private workerId: string | undefined;
 
   constructor(private readonly options: BridgeOptions) {
     super();
+    this.heartbeat = setInterval(() => this.ping(), this.options.heartbeatMs ?? 15_000);
+    this.heartbeat.unref?.();
+  }
+
+  /**
+   * Pings the active extension and drops clients that stop answering.
+   *
+   * A suspended MV3 worker leaves a socket that looks open but never
+   * delivers anything. Without this the daemon would happily report the
+   * extension as connected and every command would time out.
+   */
+  private ping(): void {
+    const now = Date.now();
+    const staleAfter = this.options.heartbeatTimeoutMs ?? 45_000;
+
+    for (const client of [...this.clients.values()]) {
+      if (now - client.lastSeenAt <= staleAfter) continue;
+      // No traffic for too long: this socket is dead.
+      this.clients.delete(client.id);
+      try {
+        client.socket.terminate();
+      } catch {
+        /* ignore */
+      }
+      this.emit('debug', { event: 'stale', clientId: client.id });
+      if (this.activeId === client.id) {
+        this.activeId = undefined;
+        this.emit('status', { connected: false, detail: 'extension heartbeat missed' });
+        this.failAllPending('Extension heartbeat missed');
+      }
+    }
+
+    const active = this.activeClient();
+    if (!active) return;
+    this.sendRaw({ v: PROTOCOL_VERSION, type: 'ping', payload: { at: now } });
+  }
+
+  /** The client that most recently showed signs of life. */
+  private activeClient(): Client | undefined {
+    let best: Client | undefined;
+    for (const client of this.clients.values()) {
+      if (client.socket.readyState !== WebSocket.OPEN) continue;
+      if (!best || client.lastSeenAt > best.lastSeenAt) best = client;
+    }
+    return best;
   }
 
   get isConnected(): boolean {
-    return this.client?.readyState === WebSocket.OPEN;
+    return this.activeClient() !== undefined;
   }
 
   get info(): BrowserClientInfo | null {
-    if (!this.clientId) return null;
+    const client = this.activeClient();
+    if (!client) return null;
     return {
-      id: this.clientId,
-      connectedAt: this.connectedAt,
-      lastSeenAt: this.lastSeenAt,
+      id: client.id,
+      connectedAt: client.connectedAt,
+      lastSeenAt: client.lastSeenAt,
       version: this.clientMeta.version,
       userAgent: this.clientMeta.userAgent,
     };
@@ -95,28 +166,29 @@ export class BrowserBridge extends EventEmitter {
 
   /** Stops the bridge and fails every in-flight command. */
   async stop(): Promise<void> {
+    clearInterval(this.heartbeat);
+
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer);
       pending.reject(new CelesteError('NETWORK_ERROR', 'Browser bridge stopped'));
     }
     this.pending.clear();
 
-    if (this.client) {
-      const socket = this.client;
-      this.client = null;
-      this.clientId = null;
-      // `close()` waits for the peer's FIN, which a wedged extension may never
-      // send. `terminate()` is immediate, so the server can actually shut down.
+    for (const client of this.clients.values()) {
+      // `terminate()` is immediate; `close()` waits for the peer's FIN, which
+      // a wedged extension may never send.
       try {
-        socket.terminate();
+        client.socket.terminate();
       } catch {
         try {
-          socket.close();
+          client.socket.close();
         } catch {
           /* ignore */
         }
       }
     }
+    this.clients.clear();
+    this.activeId = undefined;
 
     if (this.server) {
       const server = this.server;
@@ -138,25 +210,38 @@ export class BrowserBridge extends EventEmitter {
   }
 
   private handleConnection(socket: WebSocket): void {
-    // Only one extension may control the browser at a time.
-    if (this.client && this.client.readyState === WebSocket.OPEN) {
-      socket.close(4000, 'Another extension is already connected');
-      return;
-    }
-
-    this.client = socket;
-    this.clientId = createId('ext');
-    this.connectedAt = Date.now();
-    this.lastSeenAt = Date.now();
+    // Several extensions may be alive at once (multiple browser windows, or an
+    // old instance still shutting down). Each gets its own entry; the most
+    // recently active one serves commands. Crucially, no healthy client is
+    // terminated: doing so makes it reconnect, which starts a storm.
+    const client: Client = {
+      id: createId('ext'),
+      socket,
+      lastSeenAt: Date.now(),
+      connectedAt: Date.now(),
+    };
+    this.clients.set(client.id, client);
+    this.activeId = client.id;
     this.emit('status', { connected: true, detail: 'extension connected' });
+    this.emit('debug', { event: 'connected', clientId: client.id });
 
-    socket.on('message', (raw) => this.handleMessage(raw.toString()));
-    socket.on('close', () => {
-      if (this.client === socket) {
-        this.client = null;
-        this.clientId = null;
+    socket.on('message', (raw) => {
+      client.lastSeenAt = Date.now();
+      this.handleMessage(raw.toString(), client);
+    });
+    socket.on('close', (code: number, reason: Buffer) => {
+      this.clients.delete(client.id);
+      this.emit('debug', {
+        event: 'close',
+        code,
+        reason: reason?.toString?.() ?? '',
+        clientId: client.id,
+        wasActive: this.activeId === client.id,
+      });
+      if (this.activeId === client.id) {
+        this.activeId = undefined;
         this.failAllPending('Extension disconnected');
-        this.emit('status', { connected: false, detail: 'extension disconnected' });
+        this.emit('status', { connected: this.isConnected, detail: 'extension disconnected' });
       }
     });
     socket.on('error', () => {
@@ -164,8 +249,7 @@ export class BrowserBridge extends EventEmitter {
     });
   }
 
-  private handleMessage(raw: string): void {
-    this.lastSeenAt = Date.now();
+  private handleMessage(raw: string, client: Client): void {
     let message;
     try {
       message = decodeClientMessage(raw);
@@ -175,8 +259,21 @@ export class BrowserBridge extends EventEmitter {
 
     switch (message.type) {
       case 'hello': {
-        const payload = (message.payload ?? {}) as { version?: string; userAgent?: string };
+        const payload = (message.payload ?? {}) as {
+          version?: string;
+          userAgent?: string;
+          worker?: string;
+          stack?: string;
+          state?: unknown;
+        };
         this.clientMeta = { version: payload.version, userAgent: payload.userAgent };
+        client.workerId = payload.worker;
+        this.workerId = payload.worker;
+        this.emit('debug', {
+          event: 'hello',
+          worker: payload.worker ?? 'unknown',
+          clientId: client.id,
+        });
         this.sendRaw({
           v: PROTOCOL_VERSION,
           type: 'welcome',
@@ -283,8 +380,9 @@ export class BrowserBridge extends EventEmitter {
   }
 
   private sendRaw(message: { v: string; type: string; id?: string; payload?: unknown }): void {
-    if (!this.client || this.client.readyState !== WebSocket.OPEN) return;
-    this.client.send(encodeServerMessage(message as never));
+    const client = this.activeClient();
+    if (!client) return;
+    client.socket.send(encodeServerMessage(message as never));
   }
 
   /** Sends a raw event to the extension (used for approvals etc.). */

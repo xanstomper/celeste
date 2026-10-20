@@ -14,7 +14,7 @@
  * exceptions never escape.
  */
 
-import { Bridge } from './bridge.js';
+import { Bridge, WORKER_INSTANCE_ID } from './bridge.js';
 import { CelesteError, PROTOCOL_VERSION, createId, decodeServerMessage, encodeClientMessage } from './protocol.js';
 import type { BrowserCommand, BrowserResultEnvelope, ExtensionEvent, ServerMessage } from './protocol.js';
 import { dispatchCommand, ensureContentScript } from './dispatcher.js';
@@ -62,8 +62,43 @@ const bridge = new Bridge({
       void handleServerMessage(event.raw);
       return;
     }
+    if (event.type === 'open') {
+      // Announce ourselves so the daemon can tell a fresh worker instance
+      // apart from a dropped socket.
+      const hello = encodeClientMessage({
+        v: PROTOCOL_VERSION,
+        type: 'hello',
+        payload: {
+          version: PROTOCOL_VERSION,
+          worker: WORKER_INSTANCE_ID,
+          stack: bridge.getConnectStack(),
+          state: bridge.getState(),
+        },
+      });
+      if (!bridge.send(hello)) enqueue(hello);
+      return;
+    }
     if (event.type === 'close') {
       failPendingCommands(`The connection to the daemon closed (code ${event.code}).`);
+      return;
+    }
+    if (event.type === 'error') {
+      // Surface the socket's failure reason to the daemon so a broken
+      // connection can be diagnosed without opening devtools.
+      const diag = encodeClientMessage({
+        v: PROTOCOL_VERSION,
+        type: 'event',
+        payload: {
+          type: 'celeste:diagnostic',
+          payload: {
+            message: event.message ?? 'websocket error',
+            state: bridge.getState(),
+            at: Date.now(),
+          },
+          timestamp: Date.now(),
+        } satisfies ExtensionEvent,
+      });
+      if (!bridge.send(diag)) enqueue(diag);
     }
   },
 });

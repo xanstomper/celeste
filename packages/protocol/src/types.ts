@@ -310,7 +310,8 @@ export interface ExtensionEvent {
     | 'challenge.detected'
     | 'session.expired'
     | 'console.message'
-    | 'human.required';
+    | 'human.required'
+    | 'celeste:diagnostic';
   payload?: unknown;
   timestamp: number;
 }

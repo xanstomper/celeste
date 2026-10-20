@@ -87,6 +87,14 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   });
 
   const sessionGuard = new SessionGuard();
+  bridge.on('debug', (detail) => {
+    bus.publish({
+      type: 'log',
+      level: 'debug',
+      message: `bridge: ${JSON.stringify(detail)}`,
+      at: Date.now(),
+    });
+  });
   bridge.on('extension-event', (event) => {
     const changed = sessionGuard.ingest(event);
     if (changed) {
