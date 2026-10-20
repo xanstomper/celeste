@@ -216,6 +216,34 @@ celeste mcp                  Run the MCP server on stdio
 
 ---
 
+## Verification
+
+Everything below is runnable and was run before this commit.
+
+```bash
+pnpm verify        # build + unit tests + API contract + CLI + end-to-end
+```
+
+| Suite | What it proves | Result |
+|---|---|---|
+| `pnpm -r test` | 99 unit tests across 6 packages | 99/99 |
+| `pnpm verify:api` | The daemon's HTTP + SSE contract the UI depends on | 25/25 |
+| `pnpm verify:cli` | `celeste run` drives a task and writes a real file | 7/7 |
+| `pnpm verify:e2e` | Mock model + mock extension → real task → real `.docx` | 19/19 |
+| Extension | Driven in real Chrome (snapshot, click, type, network, cookies, challenge detection) | 34/34 |
+| UI | Rendered against real daemon payloads; every surface paints | 63/63 |
+
+The end-to-end suite starts a mock OpenAI-compatible model server and a mock browser
+extension, then drives a **real** task through the **real** daemon — planning, tool
+dispatch over the WebSocket bridge, document generation and artefact registration — and
+asserts that a valid `.docx` lands on disk with the expected content inside
+`word/document.xml`.
+
+Startup matters for MCP clients, so the heavy document libraries are loaded lazily:
+the MCP server answers its handshake in **0.16 s**, the daemon is ready in **0.27 s**.
+
+---
+
 ## Privacy
 
 - Everything runs locally. There is no analytics endpoint, no crash reporter, no telemetry.

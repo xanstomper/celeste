@@ -22,6 +22,9 @@
     "celeste": "pnpm --filter @celeste/cli start",
     "mcp": "pnpm --filter @celeste/mcp start",
     "verify:e2e": "node scripts/verify-e2e.mjs",
+    "verify:api": "node scripts/verify-api.mjs",
+    "verify:cli": "node scripts/verify-cli.mjs",
+    "verify": "pnpm build && pnpm -r test && pnpm verify:api && pnpm verify:cli && pnpm verify:e2e",
     "clean": "pnpm -r exec rm -rf dist node_modules/.cache && rm -rf node_modules"
   },
   "devDependencies": {

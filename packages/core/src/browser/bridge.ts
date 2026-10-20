@@ -102,18 +102,38 @@ export class BrowserBridge extends EventEmitter {
     this.pending.clear();
 
     if (this.client) {
-      try {
-        this.client.close();
-      } catch {
-        /* ignore */
-      }
+      const socket = this.client;
       this.client = null;
+      this.clientId = null;
+      // `close()` waits for the peer's FIN, which a wedged extension may never
+      // send. `terminate()` is immediate, so the server can actually shut down.
+      try {
+        socket.terminate();
+      } catch {
+        try {
+          socket.close();
+        } catch {
+          /* ignore */
+        }
+      }
     }
+
     if (this.server) {
-      await new Promise<void>((resolve) => this.server?.close(() => resolve()));
+      const server = this.server;
       this.server = null;
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        server.close(() => done());
+        // Never let a stuck connection hold the shutdown hostage.
+        setTimeout(done, 2000).unref?.();
+      });
     }
-    this.clientId = null;
+
     this.emit('status', { connected: false });
   }
 
