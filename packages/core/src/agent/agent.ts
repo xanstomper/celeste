@@ -7,6 +7,7 @@ import type { BrowserClient } from '@celeste/tools';
 import type { EventBus } from '../events.js';
 import type { TaskStore } from '../store.js';
 import { cleanAnswer } from './answer.js';
+import { shouldPlan } from './plan-policy.js';
 import type { ApprovalManager } from './approval.js';
 import type { SessionGuard } from '../browser/session-guard.js';
 import { assessRisk, buildInjectionWarning, neutraliseUntrustedText } from './guardrails.js';
@@ -91,8 +92,11 @@ export class Agent {
       this.setStatus(taskId, 'running');
       await this.options.store.checkpoint(taskId);
 
-      // 1. Plan, if we do not already have one.
-      if (task.plan.length === 0) {
+      // 1. Plan, if the job is big enough to need one and we do not already
+      // have one.
+      const prompt = task.messages.find((message) => message.role === 'user');
+      const promptText = typeof prompt?.content === 'string' ? prompt.content : task.title;
+      if (task.plan.length === 0 && shouldPlan(promptText, task.depth)) {
         await this.createPlan(taskId, controller.signal, providerId);
       }
 

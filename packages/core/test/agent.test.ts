@@ -305,7 +305,7 @@ describe('Agent', () => {
     );
 
     const task = store.create('Find the pricing');
-    store.appendMessage(task.id, { role: 'user', content: 'Find the pricing' });
+    store.appendMessage(task.id, { role: 'user', content: 'Compare the pricing plans and save a table' });
     await agent.run(task.id);
 
     const final = store.get(task.id);
@@ -332,7 +332,7 @@ describe('Agent', () => {
     );
 
     const task = store.create('Do a thing');
-    store.appendMessage(task.id, { role: 'user', content: 'Do a thing' });
+    store.appendMessage(task.id, { role: 'user', content: 'Build the thing and save it' });
     await agent.run(task.id);
 
     expect(events).toContain('task.tool.start');
@@ -359,7 +359,7 @@ describe('Agent', () => {
     );
 
     const task = store.create('Fetch the page');
-    store.appendMessage(task.id, { role: 'user', content: 'Fetch the page' });
+    store.appendMessage(task.id, { role: 'user', content: 'Fetch the page and extract every price' });
     await agent.run(task.id);
 
     const toolMessage = store.get(task.id)?.messages.find((m) => m.role === 'tool');
@@ -398,7 +398,7 @@ describe('Agent', () => {
     );
 
     const task = store.create('Try things');
-    store.appendMessage(task.id, { role: 'user', content: 'Try things' });
+    store.appendMessage(task.id, { role: 'user', content: 'Try the flow and then write a report' });
     await agent.run(task.id);
 
     const final = store.get(task.id);
@@ -436,7 +436,7 @@ describe('Agent', () => {
     });
 
     const task = store.create('Something');
-    store.appendMessage(task.id, { role: 'user', content: 'Something' });
+    store.appendMessage(task.id, { role: 'user', content: 'Do something and then save the result' });
     await agent.run(task.id);
 
     expect(store.get(task.id)?.status).toBe('awaiting_human');
@@ -470,7 +470,7 @@ describe('Agent', () => {
     });
 
     const task = store.create('Belated');
-    store.appendMessage(task.id, { role: 'user', content: 'Belated' });
+    store.appendMessage(task.id, { role: 'user', content: 'Compare the results and write a report' });
 
     // The user solves the challenge a moment later.
     const solved = setTimeout(() => {
