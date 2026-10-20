@@ -274,6 +274,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const msg = (message ?? {}) as RuntimeMessage;
 
   switch (msg.type) {
+    case 'celeste:open-panel': {
+      // Triggered by the in-page "Ask" button. The click is a user gesture,
+      // so the side panel can be opened without the user hunting for the
+      // toolbar button.
+      void (async () => {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const windowId = tabs[0]?.windowId;
+        if (typeof windowId !== 'number') {
+          sendResponse({ ok: false, error: 'No active window.' });
+          return;
+        }
+        try {
+          await chrome.sidePanel.open({ windowId });
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      })();
+      return true;
+    }
+
     case 'celeste:status': {
       void (async () => {
         const state = bridge.getState();
@@ -495,10 +516,51 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Side panel                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The side panel is Celeste's home: the agent lives in the browser, beside
+ * the page you are reading, exactly like Perplexity's Comet assistant.
+ */
+function armSidePanel(): void {
+  try {
+    // Clicking the toolbar icon opens the panel instead of a popup.
+    void chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: true })?.catch?.(() => {});
+  } catch {
+    /* the API is unavailable on older browsers */
+  }
+}
+
+chrome.action?.onClicked?.addListener((tab) => {
+  if (typeof tab?.windowId === 'number') {
+    void chrome.sidePanel?.open({ windowId: tab.windowId })?.catch?.(() => {});
+  }
+});
+
+chrome.commands?.onCommand?.addListener((command) => {
+  if (command !== '_execute_action') return;
+  void chrome.tabs
+    ?.query({ active: true, currentWindow: true })
+    ?.then((tabs) => {
+      const windowId = tabs[0]?.windowId;
+      if (typeof windowId === 'number') {
+        return chrome.sidePanel?.open({ windowId });
+      }
+      return undefined;
+    })
+    ?.catch?.(() => {});
+});
+
+chrome.runtime.onInstalled.addListener(() => armSidePanel());
+chrome.runtime.onStartup.addListener(() => armSidePanel());
+
+/* -------------------------------------------------------------------------- */
 /* Boot                                                                        */
 /* -------------------------------------------------------------------------- */
 
 armKeepalive();
+armSidePanel();
 void bridge.start();
 
 // Expose a tiny surface for the smoke test / debugging from the service

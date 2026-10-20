@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import { startDaemon } from '@celeste/core';
 import { loadConfig, saveConfig } from '@celeste/gateway';
 import type { ProviderConfig } from '@celeste/gateway';
+import { browse } from './browse.js';
 
 const VERSION = '0.1.0';
 
@@ -71,6 +72,7 @@ ${bold('USAGE')}
 
 ${bold('COMMANDS')}
   ${cyan('run')} <prompt...>       Run a task with the agent and stream the result
+  ${cyan('browse')} [url...]        Open a visible browser with the Celeste agent panel
   ${cyan('serve')}                Start the daemon (HTTP API + browser bridge)
   ${cyan('models')}               List configured providers and models
   ${cyan('use')} <provider-id>    Switch the active provider
@@ -89,9 +91,16 @@ ${bold('OPTIONS')}
   --auto-approve        Skip human approval prompts (demo mode)
   --max-steps <n>       Maximum agent steps per task
   --json                Machine readable output
+  --browser <id>        Browser for \`browse\`: brave | chrome | chromium
+  --profile <dir>       Profile directory for \`browse\`
+  --debug-port <n>      DevTools port used to open the panel (default 9222)
+  --no-panel            Do not open the agent panel automatically
+  --real-profile        Use your everyday browser profile (with its logins)
 
 ${bold('EXAMPLES')}
   celeste run "Find the pricing page for the top three GPU providers and summarise it"
+  celeste browse https://news.ycombinator.com
+  celeste browse --real-profile github.com
   celeste serve --port 9126
   celeste models
   celeste add-provider '{"id":"my-llm","kind":"openai-compatible","baseUrl":"http://localhost:8000/v1","model":"my-model"}'
@@ -197,6 +206,35 @@ async function cmdRun(args: ParsedArgs): Promise<number> {
 
   const final = runtime.store.get(task.id);
   return final?.status === 'completed' ? 0 : 1;
+}
+
+async function cmdBrowse(args: ParsedArgs): Promise<number> {
+  const urls = args.positional.filter((u) => !u.startsWith('-'));
+  const result = await browse({
+    urls,
+    browser: args.flags.browser ? String(args.flags.browser) : undefined,
+    profileDir: args.flags.profile ? String(args.flags.profile) : undefined,
+    useRealProfile: Boolean(args.flags['real-profile']),
+    debugPort: args.flags['debug-port'] ? Number(args.flags['debug-port']) : undefined,
+    noPanel: Boolean(args.flags['no-panel']),
+  });
+
+  print(bold('\nCeleste browser\n'));
+  print(`  Browser    ${result.browser.label}`);
+  print(`  Profile    ${result.profileDir}`);
+  print(`  Extension  ${result.extensionDir ?? yellow('not built — run `pnpm build:ext`')}`);
+  print('');
+  if (result.panelOpened) {
+    print(green('  ✓ The agent panel is open, docked to the right of the page.'));
+  } else {
+    print(yellow('  ! The panel could not be opened automatically.'));
+    print(dim('    Click the Celeste icon in the toolbar, or press Ctrl+Shift+K.'));
+  }
+  print('');
+  print(dim('  The daemon must be running:  celeste serve'));
+  print(dim('  Ask the agent from the panel on the right.'));
+  print('');
+  return 0;
 }
 
 async function cmdServe(args: ParsedArgs): Promise<number> {
@@ -390,6 +428,10 @@ async function main(): Promise<void> {
     case 'run':
     case 'r':
       process.exit(await cmdRun(args));
+      break;
+    case 'browse':
+    case 'browser':
+      process.exit(await cmdBrowse(args));
       break;
     case 'serve':
     case 'daemon':

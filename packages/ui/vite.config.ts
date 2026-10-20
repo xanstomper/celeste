@@ -42,5 +42,14 @@ export default defineConfig({
     target: 'es2020',
     sourcemap: false,
     chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        // Fixed names: the extension hosts this client as a side panel and
+        // references the assets from a static HTML file.
+        entryFileNames: 'assets/app.js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/app.[ext]',
+      },
+    },
   },
 });

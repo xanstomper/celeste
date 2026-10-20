@@ -1,128 +1,133 @@
 /* -------------------------------------------------------------------------- */
 /* Celeste design tokens                                                       */
 /*                                                                             */
-/* Dark first, with a carefully tuned light theme. Everything is expressed as */
-/* a custom property so the palette can be re-skinned without touching the   */
-/* component styles.                                                          */
+/* The client is a Perplexity-style assistant panel: light first, hairline     */
+/* borders, very light shadows and a single deep-teal brand accent. Every      */
+/* colour is exposed as a custom property so the palette can be re-skinned     */
+/* without touching the component styles.                                      */
 /* -------------------------------------------------------------------------- */
 
 :root {
-  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Noto Sans', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     'Roboto Mono', monospace;
 
+  /* Radii: the composer is a full pill, cards are 12-16px. */
   --radius-xs: 6px;
   --radius-sm: 8px;
-  --radius: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
 
-  --dur-fast: 120ms;
-  --dur: 170ms;
+  --dur-fast: 110ms;
+  --dur: 160ms;
   --dur-slow: 220ms;
   --ease: cubic-bezier(0.2, 0.8, 0.25, 1);
 
-  --sidebar-w: 268px;
-  --titlebar-h: 46px;
-  --statusbar-h: 30px;
+  --sidebar-w: 264px;
+  --topbar-h: 48px;
+  --statusbar-h: 28px;
 
-  /* ---- dark palette (default) ------------------------------------------ */
-  --bg: #08080c;
-  --bg-2: #0c0c12;
-  --surface: #101018;
-  --surface-2: #15151f;
-  --surface-3: #1b1b27;
-  --surface-glass: rgba(255, 255, 255, 0.025);
+  --font-body: 14px;
+  --font-small: 12px;
+  --font-tiny: 11px;
 
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.13);
-  --border-accent: rgba(129, 140, 248, 0.4);
+  /* ---- light palette (default) ------------------------------------------ */
+  --bg: #ffffff;
+  --bg-2: #fbfbfc;
+  --surface: #f7f7f8;
+  --surface-2: #ffffff;
+  --surface-3: #eeeef1;
+  --surface-glass: rgba(0, 0, 0, 0.015);
 
-  --text: #e9e9f2;
-  --text-dim: #a2a2b6;
-  --text-faint: #6c6c81;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --border-accent: rgba(29, 122, 140, 0.38);
 
-  --accent: #6366f1;
-  --accent-hi: #8b8df8;
-  --accent-soft: rgba(99, 102, 241, 0.16);
-  --accent-softer: rgba(99, 102, 241, 0.08);
-  --accent-glow: rgba(99, 102, 241, 0.4);
+  --text: #1c1c1e;
+  --text-dim: #6b6b70;
+  --text-faint: #76767f;
 
-  --ok: #34d399;
-  --ok-soft: rgba(52, 211, 153, 0.14);
-  --warn: #fbbf24;
-  --warn-soft: rgba(251, 191, 36, 0.14);
-  --danger: #f87171;
-  --danger-soft: rgba(248, 113, 113, 0.14);
-  --info: #60a5fa;
+  --accent: #20808d;
+  --accent-hi: #1d7a8c;
+  --accent-strong: #165c69;
+  --accent-soft: rgba(29, 122, 140, 0.1);
+  --accent-softer: rgba(29, 122, 140, 0.06);
+  --accent-glow: rgba(29, 122, 140, 0.28);
+  --accent-contrast: #ffffff;
 
-  --json-key: #c4b5fd;
-  --json-string: #86efac;
-  --json-number: #fbbf24;
-  --json-boolean: #60a5fa;
-  --json-null: #f472b6;
-  --json-punct: #7c7c96;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 6px 18px -6px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 24px 60px -18px rgba(0, 0, 0, 0.75), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
-  --shadow-accent: 0 0 0 1px var(--border-accent), 0 8px 26px -10px var(--accent-glow);
-
-  --app-gradient: radial-gradient(
-      1100px 620px at 12% -12%,
-      rgba(99, 102, 241, 0.12),
-      transparent 62%
-    ),
-    radial-gradient(900px 520px at 96% 0%, rgba(129, 140, 248, 0.07), transparent 58%);
-}
-
-[data-theme='light'] {
-  --bg: #f4f4f8;
-  --bg-2: #ececf3;
-  --surface: #ffffff;
-  --surface-2: #f7f7fb;
-  --surface-3: #eeeef5;
-  --surface-glass: rgba(15, 15, 30, 0.015);
-
-  --border: rgba(15, 15, 35, 0.09);
-  --border-strong: rgba(15, 15, 35, 0.16);
-  --border-accent: rgba(99, 102, 241, 0.45);
-
-  --text: #191922;
-  --text-dim: #55556c;
-  --text-faint: #85859b;
-
-  --accent: #5457e5;
-  --accent-hi: #4346d6;
-  --accent-soft: rgba(84, 87, 229, 0.11);
-  --accent-softer: rgba(84, 87, 229, 0.06);
-  --accent-glow: rgba(84, 87, 229, 0.28);
+  --bubble-user: #f2f2f3;
 
   --ok: #0f9d6a;
-  --ok-soft: rgba(15, 157, 106, 0.12);
-  --warn: #b7791f;
-  --warn-soft: rgba(183, 121, 31, 0.13);
-  --danger: #d1443f;
-  --danger-soft: rgba(209, 68, 63, 0.12);
-  --info: #2563eb;
+  --ok-soft: rgba(15, 157, 106, 0.1);
+  --warn: #a86a12;
+  --warn-soft: rgba(214, 148, 32, 0.12);
+  --warn-border: rgba(214, 148, 32, 0.4);
+  --danger: #c8382f;
+  --danger-soft: rgba(200, 56, 47, 0.09);
+  --danger-border: rgba(200, 56, 47, 0.32);
+  --info: #1f6feb;
 
   --json-key: #7c3aed;
-  --json-string: #047857;
-  --json-number: #b45309;
+  --json-string: #0a7a4f;
+  --json-number: #a35b00;
   --json-boolean: #1d4ed8;
   --json-null: #be185d;
-  --json-punct: #6b6b80;
+  --json-punct: #76767f;
 
-  --shadow-sm: 0 1px 2px rgba(20, 20, 50, 0.06);
-  --shadow-md: 0 8px 20px -8px rgba(20, 20, 50, 0.16), 0 2px 5px rgba(20, 20, 50, 0.06);
-  --shadow-lg: 0 26px 60px -20px rgba(20, 20, 50, 0.24), 0 10px 26px -14px rgba(20, 20, 50, 0.16);
-  --shadow-accent: 0 0 0 1px var(--border-accent), 0 8px 24px -12px var(--accent-glow);
+  --shadow-sm: 0 1px 2px rgba(16, 16, 32, 0.05);
+  --shadow-md: 0 4px 14px -6px rgba(16, 16, 32, 0.14), 0 1px 3px rgba(16, 16, 32, 0.05);
+  --shadow-lg: 0 18px 44px -16px rgba(16, 16, 32, 0.24), 0 4px 12px -6px rgba(16, 16, 32, 0.1);
+  --shadow-accent: 0 0 0 1px var(--border-accent), 0 6px 18px -10px var(--accent-glow);
+}
 
-  --app-gradient: radial-gradient(
-      1100px 620px at 12% -12%,
-      rgba(99, 102, 241, 0.09),
-      transparent 62%
-    ),
-    radial-gradient(900px 520px at 96% 0%, rgba(99, 102, 241, 0.05), transparent 58%);
+[data-theme='dark'] {
+  --bg: #131316;
+  --bg-2: #17171b;
+  --surface: #1c1c20;
+  --surface-2: #202026;
+  --surface-3: #292930;
+  --surface-glass: rgba(255, 255, 255, 0.03);
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(90, 190, 208, 0.4);
+
+  --text: #ececf1;
+  --text-dim: #9a9aa4;
+  --text-faint: #85858f;
+
+  --accent: #3fa7ba;
+  --accent-hi: #62c2d3;
+  --accent-strong: #7fd0de;
+  --accent-soft: rgba(63, 167, 186, 0.16);
+  --accent-softer: rgba(63, 167, 186, 0.09);
+  --accent-glow: rgba(63, 167, 186, 0.3);
+  --accent-contrast: #05161a;
+
+  --bubble-user: #242429;
+
+  --ok: #3fcf8e;
+  --ok-soft: rgba(63, 207, 142, 0.14);
+  --warn: #e0a63c;
+  --warn-soft: rgba(224, 166, 60, 0.14);
+  --warn-border: rgba(224, 166, 60, 0.36);
+  --danger: #f0776c;
+  --danger-soft: rgba(240, 119, 108, 0.14);
+  --danger-border: rgba(240, 119, 108, 0.34);
+  --info: #6ea8fe;
+
+  --json-key: #c4b5fd;
+  --json-string: #7fdcae;
+  --json-number: #f0c07a;
+  --json-boolean: #8ab4f8;
+  --json-null: #f9a8d4;
+  --json-punct: #8b8b96;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px -8px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 22px 52px -18px rgba(0, 0, 0, 0.75), 0 6px 18px -10px rgba(0, 0, 0, 0.55);
+  --shadow-accent: 0 0 0 1px var(--border-accent), 0 6px 20px -12px var(--accent-glow);
 }

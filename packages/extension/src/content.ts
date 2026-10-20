@@ -20,6 +20,7 @@
  */
 
 import type { ElementRef, ProtocolErrorShape, SnapshotElement, ToolErrorCode } from './protocol.js';
+import { installAskButton } from './ask-button.js';
 import { CONTENT_CHANNEL } from './types.js';
 import type { ContentRequest, ContentResponse } from './types.js';
 
@@ -1451,6 +1452,7 @@ function bootstrap(): void {
   startMutationObserver();
   startSessionWatcher();
   requestPageSync();
+  installAskButton();
   // If the MAIN-world hook is missing (page loaded before the extension), ask
   // the background worker to inject it.
   window.setTimeout(() => {

@@ -1,20 +1,22 @@
 /**
  * Build driver for the Celeste extension.
  *
- * Runs one Vite pass per bundle (see `vite.config.ts` for why) and makes sure
- * the static assets from `public/` land in `dist/`.
+ * Runs one Vite pass per bundle (see `vite.config.ts` for why), copies the
+ * static assets from `public/` into `dist/`, and embeds the React client as
+ * the browser side panel.
  *
  *   node scripts/build.mjs           # production build
  *   node scripts/build.mjs --watch   # rebuild on change
  */
 
-import { existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build } from 'vite';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(root, '..', '..');
 const configFile = path.join(root, 'vite.config.ts');
 
 const TARGETS = ['background', 'content', 'page-hook', 'popup'];
@@ -29,6 +31,23 @@ async function ensureIcons() {
   generateIcons(path.join(root, 'public', 'icons'));
 }
 
+/**
+ * Copies the built React client into `dist/panel/` so the extension can host
+ * it as a side panel. The client's asset names are fixed (see the UI's vite
+ * config) so `public/sidepanel.html` can reference them statically.
+ */
+function copyPanel() {
+  const uiDist = path.join(repoRoot, 'packages', 'ui', 'dist');
+  if (!existsSync(uiDist)) {
+    console.warn('[celeste:extension] UI not built — skipping side panel');
+    return;
+  }
+  const target = path.join(root, 'dist', 'panel');
+  mkdirSync(target, { recursive: true });
+  cpSync(uiDist, target, { recursive: true });
+  console.log('[celeste:extension] side panel client copied → dist/panel/');
+}
+
 await ensureIcons();
 
 for (const mode of TARGETS) {
@@ -41,5 +60,7 @@ for (const mode of TARGETS) {
     ...(watch ? { build: { watch: {} } } : {}),
   });
 }
+
+copyPanel();
 
 console.log('[celeste:extension] build complete → dist/');
