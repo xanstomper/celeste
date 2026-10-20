@@ -1,5 +1,5 @@
 import type { ChatMessage, ToolCall, ToolDefinition } from '@celeste/protocol';
-import { httpRequest, withRetry } from '../http.js';
+import { httpRequest, httpStream, withRetry } from '../http.js';
 import { ProviderError, toJsonSchema } from '../types.js';
 import type { ChatRequest, ChatResponse, ModelProvider, ProviderConfig } from '../types.js';
 
@@ -85,6 +85,8 @@ export class OpenAiCompatibleProvider implements ModelProvider {
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
+    if (request.onDelta) return this.chatStreaming(request);
+
     const body = this.buildBody(request);
     // One retry, not three: the gateway falls back to another provider, which
     // is a better recovery than hammering a provider that is not answering.
@@ -120,7 +122,11 @@ export class OpenAiCompatibleProvider implements ModelProvider {
       return response;
     }, { attempts: 2, baseDelayMs: 800, signal: request.signal });
 
-    const payload = res.json<OpenAiResponse>();
+    return this.normalise(res.json<OpenAiResponse>());
+  }
+
+  /** Turns an OpenAI-shaped payload into Celeste's normalised response. */
+  private normalise(payload: OpenAiResponse): ChatResponse {
     if (payload.error) {
       throw new ProviderError(this.config.id, payload.error.message ?? 'Unknown provider error', {
         retryable: true,
@@ -153,6 +159,126 @@ export class OpenAiCompatibleProvider implements ModelProvider {
             promptTokens: payload.usage.prompt_tokens,
             completionTokens: payload.usage.completion_tokens,
             totalTokens: payload.usage.total_tokens,
+          }
+        : undefined,
+      providerId: this.config.id,
+      model: this.config.model,
+    };
+  }
+
+  /**
+   * Streams a completion, calling `request.onDelta` for each fragment.
+   *
+   * The assembled message is still returned in full, so the agent stores and
+   * renders exactly what a non-streaming call would have produced. A server
+   * that ignores `stream: true` is detected and parsed the normal way.
+   */
+  private async chatStreaming(request: ChatRequest): Promise<ChatResponse> {
+    const body: Record<string, unknown> = { ...this.buildBody(request), stream: true };
+    let content = '';
+    let finishReason: string | undefined;
+    let usage: OpenAiResponse['usage'];
+    const calls = new Map<number, { id?: string; name?: string; arguments: string }>();
+
+    const res = await httpStream({
+      url: `${this.baseUrl}/chat/completions`,
+      method: 'POST',
+      headers: this.buildHeaders(),
+      body,
+      signal: request.signal,
+      timeoutMs: this.config.timeoutMs ?? 120_000,
+      onData: (data) => {
+        if (data === '[DONE]') return;
+
+        interface StreamEvent {
+          choices?: Array<{
+            delta?: {
+              content?: string | null;
+              tool_calls?: Array<{
+                index?: number;
+                id?: string;
+                function?: { name?: string; arguments?: string };
+              }>;
+            };
+            finish_reason?: string;
+          }>;
+          usage?: OpenAiResponse['usage'];
+        }
+
+        let event: StreamEvent;
+        try {
+          event = JSON.parse(data) as StreamEvent;
+        } catch {
+          return;
+        }
+
+        if (event.usage) usage = event.usage;
+        const choice = event.choices?.[0];
+        if (!choice) return;
+
+        const delta = choice.delta;
+        if (typeof delta?.content === 'string' && delta.content.length > 0) {
+          content += delta.content;
+          request.onDelta?.(delta.content);
+        }
+
+        for (const tc of delta?.tool_calls ?? []) {
+          const index = typeof tc.index === 'number' ? tc.index : 0;
+          const entry = calls.get(index) ?? { arguments: '' };
+          if (typeof tc.id === 'string') entry.id = tc.id;
+          if (typeof tc.function?.name === 'string') entry.name = tc.function.name;
+          if (typeof tc.function?.arguments === 'string') entry.arguments += tc.function.arguments;
+          calls.set(index, entry);
+        }
+
+        if (typeof choice.finish_reason === 'string') finishReason = choice.finish_reason;
+      },
+    });
+
+    if (!res.ok) {
+      const detail = this.extractError(res.text);
+      const retryAfterMs = parseRetryAfter(detail);
+      const rateLimited = res.status === 402 || res.status === 429;
+      throw new ProviderError(
+        this.config.id,
+        `${this.config.label} (${this.config.model}) request failed [${res.status}]: ${detail}`,
+        {
+          status: res.status,
+          retryable:
+            res.status >= 500 || res.status === 429 || (rateLimited && retryAfterMs !== undefined),
+          ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+        },
+      );
+    }
+
+    // Nothing was streamed and the body looks like JSON: the server ignored
+    // `stream: true`.
+    if (content.length === 0 && calls.size === 0 && res.text.trim().startsWith('{')) {
+      return this.normalise(res.json<OpenAiResponse>());
+    }
+
+    const toolCalls: ToolCall[] = [...calls.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .filter(([, call]) => Boolean(call.name))
+      .map(([index, call]) => ({
+        id: call.id ?? `call_${index}`,
+        name: call.name!,
+        arguments: parseArguments(call.arguments),
+      }));
+
+    return {
+      message: {
+        role: 'assistant',
+        content,
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      },
+      toolCalls,
+      finishReason,
+      usage: usage
+        ? {
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens,
           }
         : undefined,
       providerId: this.config.id,

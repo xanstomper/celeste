@@ -33,6 +33,13 @@ export type DaemonEvent =
   | { type: 'task.plan'; taskId: string; plan: PlanStep[]; at: number }
   | { type: 'task.message'; taskId: string; message: ChatMessage; at: number }
   | {
+      type: 'task.delta';
+      taskId: string;
+      /** A fragment of the answer as the model writes it. */
+      delta: string;
+      at: number;
+    }
+  | {
       type: 'task.tool.start';
       taskId: string;
       callId: string;

@@ -77,6 +77,112 @@ export async function httpRequest(req: HttpRequest): Promise<HttpResponse> {
 }
 
 /**
+ * Like `httpRequest`, but reads the body as it arrives and hands every SSE
+ * `data:` payload to `onData`.
+ *
+ * The full text is still returned, so a provider that ignores `stream: true`
+ * and answers with ordinary JSON can be handled by the caller exactly like a
+ * non-streaming response.
+ */
+export async function httpStream(
+  req: HttpRequest & { onData: (data: string) => void },
+): Promise<HttpResponse> {
+  const controller = new AbortController();
+  const timeoutMs = req.timeoutMs ?? 120_000;
+  const timer = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
+
+  const onOuterAbort = () => controller.abort(req.signal?.reason);
+  if (req.signal) {
+    if (req.signal.aborted) controller.abort(req.signal.reason);
+    else req.signal.addEventListener('abort', onOuterAbort, { once: true });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(req.url, {
+      method: req.method ?? (req.body !== undefined ? 'POST' : 'GET'),
+      headers: {
+        'content-type': 'application/json',
+        ...(req.headers ?? {}),
+      },
+      body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    req.signal?.removeEventListener('abort', onOuterAbort);
+    const aborted = controller.signal.aborted;
+    throw new ProviderError('http', aborted ? 'Request aborted or timed out' : String(err), {
+      retryable: true,
+      cause: err,
+    });
+  }
+
+  const headers: Record<string, string> = {};
+  res.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value;
+  });
+
+  const finish = (text: string): HttpResponse => ({
+    status: res.status,
+    ok: res.ok,
+    headers,
+    text,
+    json<T = unknown>(): T {
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new ProviderError('http', `Expected JSON but got: ${text.slice(0, 300)}`);
+      }
+    },
+  });
+
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '');
+    clearTimeout(timer);
+    req.signal?.removeEventListener('abort', onOuterAbort);
+    return finish(text);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let raw = '';
+  let buffer = '';
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      raw += chunk;
+      buffer += chunk;
+
+      // SSE frames end with a blank line. Providers use \n\n, but some use
+      // \r\n\r\n, so normalise as we go.
+      buffer = buffer.replace(/\r\n/g, '\n');
+      let split = buffer.indexOf('\n\n');
+      while (split >= 0) {
+        const frame = buffer.slice(0, split);
+        buffer = buffer.slice(split + 2);
+        for (const line of frame.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (data) req.onData(data);
+        }
+        split = buffer.indexOf('\n\n');
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+    req.signal?.removeEventListener('abort', onOuterAbort);
+  }
+
+  return finish(raw);
+}
+
+/**
  * Retries a request with exponential backoff. Only retries when the error is
  * explicitly marked retryable (network blips, 429, 5xx).
  */

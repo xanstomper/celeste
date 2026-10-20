@@ -188,3 +188,51 @@ describe('tool results', () => {
     expect(result.sources?.[0]?.domain).toBe('nasa.gov');
   });
 });
+
+describe('streaming', () => {
+  it('accumulates deltas into one preview, then replaces it with the message', () => {
+    const events = [
+      { type: 'task.delta', taskId: 't', delta: 'The ', at: 1 },
+      { type: 'task.delta', taskId: 't', delta: 'answer', at: 2 },
+    ] as const;
+
+    const streaming = buildTimeline(events);
+    const preview = streaming.filter((item) => item.kind === 'streaming');
+
+    expect(preview).toHaveLength(1);
+    expect(preview[0]?.kind === 'streaming' ? preview[0].text : '').toBe('The answer');
+
+    const finished = buildTimeline([
+      ...events,
+      {
+        type: 'task.message',
+        taskId: 't',
+        message: { role: 'assistant', content: 'The answer' },
+        at: 3,
+      },
+    ]);
+
+    expect(finished.some((item) => item.kind === 'streaming')).toBe(false);
+    expect(
+      finished.filter((item) => item.kind === 'message' && item.role === 'assistant'),
+    ).toHaveLength(1);
+  });
+
+  it('starts a fresh preview for the next answer', () => {
+    const items = buildTimeline([
+      { type: 'task.delta', taskId: 't', delta: 'First', at: 1 },
+      {
+        type: 'task.message',
+        taskId: 't',
+        message: { role: 'assistant', content: 'First' },
+        at: 2,
+      },
+      { type: 'task.message', taskId: 't', message: { role: 'user', content: 'Again' }, at: 3 },
+      { type: 'task.delta', taskId: 't', delta: 'Second', at: 4 },
+    ]);
+
+    const previews = items.filter((item) => item.kind === 'streaming');
+    expect(previews).toHaveLength(1);
+    expect(previews[0]?.kind === 'streaming' ? previews[0].text : '').toBe('Second');
+  });
+});

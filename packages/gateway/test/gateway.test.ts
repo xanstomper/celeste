@@ -50,6 +50,134 @@ function mockApi(response: unknown, status = 200) {
   };
 }
 
+/** A tiny HTTP server that answers with server-sent events. */
+function sseApi(frames: unknown[]) {
+  let server: Server;
+  const received: Array<Record<string, unknown>> = [];
+
+  const ready = new Promise<{ port: number }>((resolve) => {
+    server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => {
+        try {
+          received.push(JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>);
+        } catch {
+          received.push({});
+        }
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        for (const frame of frames) res.write(`data: ${JSON.stringify(frame)}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      });
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      resolve({ port });
+    });
+  });
+
+  return {
+    ready,
+    received,
+    async close() {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+describe('streaming', () => {
+  function providerFor(port: number) {
+    return new OpenAiCompatibleProvider({
+      id: 'stream',
+      kind: 'openai-compatible',
+      label: 'Stream',
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      model: 'stream-model',
+      apiKey: 'secret',
+    });
+  }
+
+  it('calls onDelta for each fragment and assembles the message', async () => {
+    const api = sseApi([
+      { choices: [{ delta: { content: 'The ' } }] },
+      { choices: [{ delta: { content: 'answer ' } }] },
+      { choices: [{ delta: { content: 'is 42.' } }] },
+      { choices: [{ delta: {}, finish_reason: 'stop' }] },
+    ]);
+    const { port } = await api.ready;
+
+    const deltas: string[] = [];
+    const response = await providerFor(port).chat({
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    expect(deltas).toEqual(['The ', 'answer ', 'is 42.']);
+    expect(response.message.content).toBe('The answer is 42.');
+    expect(response.finishReason).toBe('stop');
+    expect(api.received[0]?.stream).toBe(true);
+
+    await api.close();
+  });
+
+  it('assembles a tool call split across fragments', async () => {
+    const api = sseApi([
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: 'call_9', function: { name: 'web_search', arguments: '{"que' } },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        choices: [
+          {
+            delta: { tool_calls: [{ index: 0, function: { arguments: 'ry":"hubble"}' } }] },
+          },
+        ],
+      },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    ]);
+    const { port } = await api.ready;
+
+    const response = await providerFor(port).chat({
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: () => {},
+    });
+
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls[0]?.id).toBe('call_9');
+    expect(response.toolCalls[0]?.name).toBe('web_search');
+    expect(response.toolCalls[0]?.arguments).toEqual({ query: 'hubble' });
+
+    await api.close();
+  });
+
+  it('falls back when the server ignores stream: true', async () => {
+    const api = mockApi({
+      choices: [{ message: { role: 'assistant', content: 'whole answer' }, finish_reason: 'stop' }],
+    });
+    const { port } = await api.ready;
+
+    const deltas: string[] = [];
+    const response = await providerFor(port).chat({
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    expect(deltas).toEqual([]);
+    expect(response.message.content).toBe('whole answer');
+
+    await api.close();
+  });
+});
+
 describe('parseRetryAfter', () => {
   it('reads the wait from the ways providers word it', () => {
     expect(

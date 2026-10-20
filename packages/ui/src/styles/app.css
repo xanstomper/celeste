@@ -783,6 +783,39 @@ button {
   font-style: italic;
 }
 
+/* The live answer: same bubble, plus a cursor while it is written. */
+.bubble--streaming .bubble__body {
+  min-height: 24px;
+}
+
+.bubble__caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: caret-blink 1.05s steps(2, start) infinite;
+}
+
+.bubble__writing {
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble__caret {
+    animation: none;
+  }
+}
+
 .bubble__meta {
   display: flex;
   align-items: center;

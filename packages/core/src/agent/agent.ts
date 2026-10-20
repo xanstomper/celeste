@@ -226,6 +226,16 @@ export class Agent {
           messages,
           ...(tools.length > 0 ? { tools } : {}),
           signal,
+          // The panel paints the answer as it is written. The full message
+          // still arrives at the end and replaces the preview, so a provider
+          // that cannot stream simply shows up all at once.
+          onDelta: (delta) =>
+            this.options.bus.publish({
+              type: 'task.delta',
+              taskId,
+              delta,
+              at: Date.now(),
+            }),
         },
         run.providerId,
       );

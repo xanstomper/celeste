@@ -62,6 +62,14 @@ export interface ChatRequest {
   toolChoice?: 'auto' | 'none' | 'required';
   /** Aborts the underlying HTTP request. */
   signal?: AbortSignal;
+  /**
+   * Called with each fragment of the answer as it is written.
+   *
+   * Providers that support streaming use it; the others simply never call
+   * it and return the whole message at once. Callers must treat it as a
+   * preview: the final `ChatResponse` is still the source of truth.
+   */
+  onDelta?: (delta: string) => void;
   /** Extra provider-specific body fields. */
   extraBody?: Record<string, unknown>;
 }

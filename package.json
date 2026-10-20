@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "build": "pnpm -r --filter @celeste/extension build && pnpm -r --filter '!@celeste/extension' build",
+    "build": "pnpm -r build",
     "build:ext": "pnpm --filter @celeste/extension build",
     "build:ui": "pnpm --filter @celeste/ui build",
     "typecheck": "pnpm -r typecheck",

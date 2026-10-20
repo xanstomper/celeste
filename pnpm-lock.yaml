@@ -120,6 +120,9 @@ importers:
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
+      '@celeste/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@types/chrome':
         specifier: ^0.0.287
         version: 0.0.287

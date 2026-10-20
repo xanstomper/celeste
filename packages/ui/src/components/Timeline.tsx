@@ -49,14 +49,38 @@ export function Timeline({
 }: TimelineProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(items.length);
+  const streamRef = useRef(0);
+
+  // While the answer streams, the item count does not change but its text
+  // does. Follow it — unless the reader has scrolled back up to read
+  // something, in which case the view stays where they put it.
+  const lastItem = items[items.length - 1];
+  const streamLength = lastItem?.kind === 'streaming' ? lastItem.text.length : 0;
 
   useEffect(() => {
-    if (items.length === countRef.current) return;
+    const added = items.length !== countRef.current;
+    const grew = streamLength !== streamRef.current;
     countRef.current = items.length;
+    streamRef.current = streamLength;
+    if (!added && !grew) return;
+
     const node = bottomRef.current;
     if (!node) return;
+
+    if (!added) {
+      let scroller: HTMLElement | null = node.parentElement;
+      while (scroller) {
+        const overflow = getComputedStyle(scroller).overflowY;
+        if (overflow === 'auto' || overflow === 'scroll') break;
+        scroller = scroller.parentElement;
+      }
+      if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 240) {
+        return;
+      }
+    }
+
     node.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'end' });
-  }, [items.length]);
+  }, [items.length, streamLength]);
 
   if (items.length === 0) {
     return (
@@ -142,6 +166,30 @@ export function Timeline({
                 {cites.refs.length > 0 && item.id === lastAnswerId ? (
                   <SourcesRow refs={cites.refs} />
                 ) : null}
+              </div>
+            );
+          }
+
+          case 'streaming': {
+            if (!item.text.trim()) return null;
+            const cites = buildCitations(item.text, sourceIndex);
+            return (
+              <div className="bubble bubble--assistant bubble--streaming" key={item.id}>
+                <div className="bubble__body">
+                  <Markdown
+                    className="bubble__text bubble__text--prose"
+                    content={item.text}
+                    citations={cites.byNumber}
+                  />
+                  <span className="bubble__caret" aria-hidden="true" />
+                </div>
+                <div className="bubble__meta">
+                  <span className="bubble__author">
+                    <Icon name="bot" size={11} />
+                    Celeste
+                  </span>
+                  <span className="bubble__writing">writing…</span>
+                </div>
               </div>
             );
           }

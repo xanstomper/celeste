@@ -35,6 +35,20 @@ export interface MessageTimelineItem {
   toolCalls: ToolCall[] | undefined;
 }
 
+/**
+ * The answer as it is being written.
+ *
+ * A preview only: the complete assistant message arrives immediately after
+ * and replaces this item, so the transcript always ends up holding exactly
+ * what the daemon stored.
+ */
+export interface StreamingTimelineItem {
+  kind: 'streaming';
+  id: string;
+  at: number;
+  text: string;
+}
+
 export interface ToolTimelineItem {
   kind: 'tool';
   id: string;
@@ -105,6 +119,7 @@ export interface StatusTimelineItem {
 
 export type TimelineItem =
   | MessageTimelineItem
+  | StreamingTimelineItem
   | ToolTimelineItem
   | PlanTimelineItem
   | SuggestionsTimelineItem
@@ -271,9 +286,20 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
   const approvalIndex = new Map<string, number>();
   let planIndex = -1;
   let suggestionsIndex = -1;
+  let streamIndex = -1;
 
   events.forEach((event, index) => {
     const key = `e${index}`;
+
+    // The finished message replaces the preview, so the reader never sees the
+    // same answer twice.
+    if (event.type === 'task.message' && event.message.role === 'assistant' && streamIndex >= 0) {
+      items.splice(streamIndex, 1);
+      if (planIndex > streamIndex) planIndex -= 1;
+      if (suggestionsIndex > streamIndex) suggestionsIndex -= 1;
+      streamIndex = -1;
+    }
+
     switch (event.type) {
       case 'task.created':
         return;
@@ -313,6 +339,19 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
         }
         planIndex = items.length;
         items.push({ kind: 'plan', id: key, at: event.at, steps: event.plan });
+        return;
+      }
+
+      case 'task.delta': {
+        if (streamIndex >= 0) {
+          const existing = items[streamIndex];
+          if (existing?.kind === 'streaming') {
+            items[streamIndex] = { ...existing, text: existing.text + event.delta, at: event.at };
+            return;
+          }
+        }
+        streamIndex = items.length;
+        items.push({ kind: 'streaming', id: key, at: event.at, text: event.delta });
         return;
       }
 

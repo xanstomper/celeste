@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Celeste browser extension (Manifest V3) — drives Brave/Chromium.",
+  "description": "Celeste browser extension (Manifest V3) \u2014 drives Brave/Chromium.",
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
@@ -15,6 +15,7 @@
     "@celeste/protocol": "workspace:*"
   },
   "devDependencies": {
+    "@celeste/ui": "workspace:*",
     "@types/chrome": "^0.0.287",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",

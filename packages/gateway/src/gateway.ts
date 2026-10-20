@@ -93,15 +93,29 @@ export class ModelGateway {
   async chat(request: ChatRequest, providerId?: string): Promise<ChatResponse> {
     const primary = this.getProvider(providerId);
 
+    // Once a provider has streamed part of an answer to the screen, falling
+    // back to another provider would repeat it. At that point the failure is
+    // final: a half-written answer is better than two overlapping ones.
+    let streamed = false;
+    const tracked: ChatRequest = request.onDelta
+      ? {
+          ...request,
+          onDelta: (delta) => {
+            streamed = true;
+            request.onDelta?.(delta);
+          },
+        }
+      : request;
+
     try {
-      return await primary.chat(request);
+      return await primary.chat(tracked);
     } catch (err) {
       // An upstream outage can surface as anything from a 404 ("no
       // candidates") to a 502. Only a request the provider rejected as
       // malformed is worth giving up on: another provider would reject it
       // the same way.
       const malformed = err instanceof ProviderError && (err.status === 400 || err.status === 422);
-      if (malformed || request.signal?.aborted) throw err;
+      if (malformed || streamed || request.signal?.aborted) throw err;
 
       const alternatives = this.listProviders().filter(
         (cfg) => cfg.id !== primary.config.id,
@@ -112,7 +126,7 @@ export class ModelGateway {
       for (const cfg of alternatives) {
         if (request.signal?.aborted) throw lastError;
         try {
-          return await this.getProvider(cfg.id).chat(request);
+          return await this.getProvider(cfg.id).chat(tracked);
         } catch (next) {
           lastError = next;
         }
