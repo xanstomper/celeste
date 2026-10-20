@@ -126,6 +126,12 @@ class Cdp {
       awaitPromise: true,
       ...(userGesture ? { userGesture: true } : {}),
     });
+    if (result?.exceptionDetails) {
+      const details = result.exceptionDetails;
+      const message =
+        details.exception?.description ?? details.text ?? JSON.stringify(details);
+      throw new Error(`evaluation failed: ${message}`);
+    }
     return result?.result?.result?.value;
   }
 
@@ -181,7 +187,7 @@ interface DevToolsTarget {
  * does, so that is what we do: open the extension's helper page, click it,
  * and the panel docks itself.
  */
-async function openSidePanel(debugPort: number): Promise<boolean> {
+async function openSidePanel(debugPort: number, urls: string[] = []): Promise<boolean> {
   // Wait for the DevTools endpoint *and* the extension's service worker —
   // the debugger comes up long before the extension does.
   let targets: DevToolsTarget[] = [];
@@ -228,17 +234,36 @@ async function openSidePanel(debugPort: number): Promise<boolean> {
   const page = await Cdp.connect(tab.webSocketDebuggerUrl);
   try {
     // `userGesture: true` makes the evaluation count as a user gesture,
-    // which is what `chrome.sidePanel.open()` insists on. The focused window
-    // is the one the user is actually looking at.
-    const result = await page.evaluate(
-      `chrome.windows.getAll({}).then((w) => {
-         const target = w.find((x) => x.focused) || w[0];
-         return chrome.sidePanel.open({ windowId: target.id });
-       }).then(() => 'OPENED').catch((e) => 'ERR:' + e.message)`,
-      true,
-    );
-    trace(`sidePanel.open -> ${String(result)}`);
-    if (typeof result === 'string' && result.startsWith('ERR')) return false;
+    // which is what `chrome.sidePanel.open()` insists on.
+    //
+    // The window is chosen by looking for the tab we asked the browser to
+    // open. On a fresh profile Brave shows a welcome tab that owns the
+    // focus, and opening the panel there would put it in the wrong window.
+    const wanted = JSON.stringify(urls.filter((u) => u !== 'about:blank'));
+    const expression = `chrome.tabs.query({}).then((tabs) => {
+         let target = tabs.find((t) => t.url && ${wanted}.some((u) => t.url.startsWith(u)));
+         if (!target) target = tabs.find((t) => t.url && !t.url.startsWith('chrome-extension://'));
+         if (target && typeof target.windowId === 'number') {
+           return chrome.sidePanel.open({ windowId: target.windowId });
+         }
+         return chrome.windows.getAll({}).then((w) => chrome.sidePanel.open({ windowId: (w.find((x) => x.focused) || w[0]).id }));
+       }).then(() => 'OPENED').catch((e) => 'ERR:' + e.message)`;
+
+    // The extension's page may not be fully initialised on the very first
+    // try, so give it a couple of attempts.
+    let result: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await sleep(600);
+      try {
+        result = await page.evaluate(expression, true);
+      } catch (err) {
+        trace(`attempt ${attempt + 1} threw: ${err instanceof Error ? err.message : String(err)}`);
+        result = undefined;
+      }
+      if (result === 'OPENED') break;
+      trace(`attempt ${attempt + 1} -> ${String(result)}`);
+    }
+    if (result !== 'OPENED') return false;
   } catch {
     return false;
   } finally {
@@ -247,11 +272,20 @@ async function openSidePanel(debugPort: number): Promise<boolean> {
     void fetch(`http://127.0.0.1:${debugPort}/json/close/${tab.id}`).catch(() => undefined);
   }
 
-  await sleep(800);
-  const after = (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()) as DevToolsTarget[];
-  const open = after.some((t) => t.url.includes('sidepanel.html'));
-  trace(`panel open = ${open}`);
-  return open;
+  // The panel target takes a moment to appear after the open resolves.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const after = (await (
+      await fetch(`http://127.0.0.1:${debugPort}/json/list`)
+    ).json()) as DevToolsTarget[];
+    const open = after.some((t) => t.url.includes('sidepanel.html'));
+    if (open) {
+      trace('panel open = true');
+      return true;
+    }
+    await sleep(250);
+  }
+  trace('panel open = false');
+  return false;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -266,8 +300,33 @@ export interface LaunchedBrowser {
   debugPort: number;
 }
 
+/** Finds a free TCP port so two browsers never fight over the debugger. */
+async function freePort(preferred?: number): Promise<number> {
+  const { createServer } = await import('node:net');
+
+  const tryPort = (port: number): Promise<number | null> =>
+    new Promise((resolve) => {
+      const server = createServer();
+      server.once('error', () => resolve(null));
+      server.once('listening', () => {
+        const address = server.address();
+        const actual = typeof address === 'object' && address ? address.port : port;
+        server.close(() => resolve(actual));
+      });
+      server.listen(port, '127.0.0.1');
+    });
+
+  if (preferred) {
+    const found = await tryPort(preferred);
+    if (found !== null) return found;
+  }
+  // Ask the OS for an ephemeral port.
+  const fallback = await tryPort(0);
+  return fallback ?? 9222;
+}
+
 /** Starts the browser. */
-export function launch(options: BrowseOptions): LaunchedBrowser {
+export async function launch(options: BrowseOptions): Promise<LaunchedBrowser> {
   const browser = findBrowser(options.browser);
   if (!browser) {
     throw new Error(
@@ -278,7 +337,7 @@ export function launch(options: BrowseOptions): LaunchedBrowser {
   const extensionDir = extensionPath();
   const profileDir =
     options.profileDir ?? path.join(homedir(), '.celeste', 'browser-profile');
-  const debugPort = options.debugPort ?? 9222;
+  const debugPort = await freePort(options.debugPort);
 
   if (!options.useRealProfile) {
     mkdirSync(profileDir, { recursive: true });
@@ -324,12 +383,12 @@ export interface BrowseResult {
  * Launches the browser and opens the agent panel in it.
  */
 export async function browse(options: BrowseOptions): Promise<BrowseResult> {
-  const launched = launch(options);
+  const launched = await launch(options);
 
   let panelOpened = false;
   if (!options.noPanel) {
     try {
-      panelOpened = await openSidePanel(launched.debugPort);
+      panelOpened = await openSidePanel(launched.debugPort, options.urls);
     } catch {
       panelOpened = false;
     }
