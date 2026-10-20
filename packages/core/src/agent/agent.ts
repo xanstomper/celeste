@@ -3,6 +3,7 @@ import type { ChatMessage, PlanStep, ToolCall, ToolResult } from '@celeste/proto
 import { CelesteError, PROTOCOL_VERSION } from '@celeste/protocol';
 import type { ModelGateway } from '@celeste/gateway';
 import type { ToolRegistry, ToolContext } from '@celeste/tools';
+import type { BrowserClient } from '@celeste/tools';
 import type { EventBus } from '../events.js';
 import type { TaskStore } from '../store.js';
 import type { ApprovalManager } from './approval.js';
@@ -28,6 +29,8 @@ export interface AgentOptions {
   bus: EventBus;
   approvals: ApprovalManager;
   sessionGuard: SessionGuard;
+  /** The browser, so tools can search and read pages directly. */
+  browser?: BrowserClient;
   /** Provider override for this run. */
   providerId?: string;
   /** Maximum number of model round-trips. */
@@ -36,6 +39,11 @@ export interface AgentOptions {
   outputDir?: string;
   /** Auto-approve risky actions (demo mode). */
   autoApprove?: boolean;
+  /**
+   * How long a run waits for the user to clear a sign-in prompt or CAPTCHA
+   * before it pauses. Defaults to two minutes.
+   */
+  guardWaitMs?: number;
 }
 
 /**
@@ -192,7 +200,12 @@ export class Agent {
           reason: status.detail ?? 'Human intervention required.',
           at: Date.now(),
         });
-        return;
+        // Wait a little: the user may solve the challenge, or the page may
+        // move on, and the guard will clear itself. Then carry on.
+        const cleared = await this.waitForGuard(signal);
+        if (!cleared) return;
+        this.setStatus(taskId, 'running');
+        continue;
       }
 
       const task = this.options.store.get(taskId);
@@ -355,6 +368,23 @@ export class Agent {
   }
 
   private finishTool(taskId: string, result: ToolResult): void {
+    // Keep the task's source list up to date so a reopened thread still has
+    // its citations.
+    if (result.sources && result.sources.length > 0) {
+      this.options.store.update(taskId, (task) => {
+        const existing = task.sources ?? [];
+        const known = new Set(existing.map((source) => source.n));
+        const merged = [...existing];
+        for (const source of result.sources ?? []) {
+          if (!known.has(source.n)) {
+            known.add(source.n);
+            merged.push(source);
+          }
+        }
+        task.sources = merged;
+      });
+    }
+
     this.options.bus.publish({
       type: 'task.tool.end',
       taskId,
@@ -363,6 +393,7 @@ export class Agent {
       ok: result.ok,
       summary: result.summary,
       durationMs: result.durationMs ?? 0,
+      ...(result.sources && result.sources.length > 0 ? { sources: result.sources } : {}),
       data: result.data,
       error: result.error ? { code: result.error.code, message: result.error.message } : undefined,
       at: Date.now(),
@@ -407,12 +438,53 @@ export class Agent {
   /* Helpers                                                                */
   /* ---------------------------------------------------------------------- */
 
+  /**
+   * Waits for the session guard to clear.
+   *
+   * The user is being asked to solve a challenge or sign in again. Polling
+   * for a couple of minutes means the run resumes by itself the moment they
+   * are done, instead of having to be restarted.
+   */
+  private async waitForGuard(signal: AbortSignal): Promise<boolean> {
+    const guard = this.options.sessionGuard;
+    if (!guard.blocked) return true;
+
+    const waitMs = this.options.guardWaitMs ?? 120_000;
+    if (waitMs <= 0 || signal.aborted) return false;
+
+    // Listen rather than poll: the moment the user clears the challenge the
+    // run continues, with no up-to-two-second dead time.
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const finish = (value: boolean): void => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        guard.off('change', onChange);
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      };
+
+      const onChange = (): void => {
+        if (!guard.blocked) finish(true);
+      };
+      const onAbort = (): void => finish(false);
+
+      timer = setTimeout(() => finish(!guard.blocked), waitMs);
+      guard.on('change', onChange);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
   private buildContext(taskId: string, signal: AbortSignal, outputDir?: string): ToolContext {
     return {
       taskId,
       signal,
       bus: this.options.bus,
       store: this.options.store,
+      ...(this.options.browser ? { browser: this.options.browser } : {}),
       outputDir: outputDir ?? this.options.outputDir ?? process.cwd(),
       approval: {
         request: (req) => this.options.approvals.request(taskId, req),

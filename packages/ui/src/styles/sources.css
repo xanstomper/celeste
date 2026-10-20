@@ -1,0 +1,197 @@
+/* -------------------------------------------------------------------------- */
+/* Citations and the source row                                               */
+/*                                                                             */
+/* An answer should look researched rather than asserted: numbered superscripts */
+/* in the prose, and a quiet row of source chips underneath.                   */
+/* -------------------------------------------------------------------------- */
+
+.md__cites {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 1px;
+  vertical-align: baseline;
+  position: relative;
+  top: -0.28em;
+  line-height: 1;
+}
+
+.md__cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.md__cite:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.md__cite--plain {
+  background: var(--surface);
+  color: var(--text-faint);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Source row                                                                  */
+/* -------------------------------------------------------------------------- */
+
+.sources {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.sources__label {
+  margin-bottom: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sources__count {
+  color: var(--text-dim);
+}
+
+.sources__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.source {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.source__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.source__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  text-decoration: none;
+  max-width: 100%;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.source__chip:hover {
+  border-color: var(--border-accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.source__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  background: hsl(var(--source-hue, 190) 42% 90%);
+  color: hsl(var(--source-hue, 190) 55% 26%);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.source__domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 130px;
+}
+
+.source__n {
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.source__toggle {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.source__toggle:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.source__detail {
+  margin: 6px 0 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  max-width: 100%;
+}
+
+.source__title {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.source__title:hover {
+  text-decoration: underline;
+}
+
+.source__snippet {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* Dark theme: the badge needs its own contrast. */
+[data-theme='dark'] .source__badge {
+  background: hsl(var(--source-hue, 190) 32% 24%);
+  color: hsl(var(--source-hue, 190) 60% 84%);
+}
+
+[data-theme='dark'] .md__cite:hover {
+  color: #0b0b0d;
+}
+
+/* In the side panel the chips stay on one scrollable line per source. */
+html[data-celeste-panel='true'] .source__domain {
+  max-width: 108px;
+}

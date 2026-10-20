@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 
+import { citedNumbers, collectSources, resolveSources } from '../lib/citations';
 import { formatClockTime } from '../lib/format';
 import { Markdown } from '../lib/markdown';
+import { SourcesRow } from './SourcesRow';
+import type { Source } from '@celeste/protocol';
 import type { TimelineItem } from '../state/timeline';
 import { ApprovalCard } from './ApprovalCard';
 import { ArtifactCard } from './ArtifactCard';
@@ -16,6 +19,8 @@ export interface TimelineProps {
   onDismissHuman: (key: string) => void;
   onRespondApproval: (requestId: string, decision: 'approve' | 'deny') => void;
   busy?: boolean;
+  /** Sources the task collected, for threads restored from the daemon. */
+  taskSources?: Source[];
 }
 
 function reduceMotion(): boolean {
@@ -36,6 +41,7 @@ export function Timeline({
   onDismissHuman,
   onRespondApproval,
   busy,
+  taskSources,
 }: TimelineProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(items.length);
@@ -65,6 +71,22 @@ export function Timeline({
     );
   }
 
+  // Every source the task has gathered, numbered once for the whole thread.
+  // Sources from the live event stream win; the task's own list fills in the
+  // ones from before the panel was opened.
+  const sourceIndex = collectSources(items);
+  for (const source of taskSources ?? []) {
+    if (!sourceIndex.has(source.n)) sourceIndex.set(source.n, source);
+  }
+
+  // Only the newest answer carries the source row, so a long thread does not
+  // repeat the same list under every message.
+  const lastAnswerId = [...items]
+    .reverse()
+    .find(
+      (item) => item.kind === 'message' && item.role === 'assistant' && item.text.trim().length > 0,
+    )?.id;
+
   return (
     <div className="timeline">
       {items.map((item) => {
@@ -76,6 +98,7 @@ export function Timeline({
             // own — the tool card says everything. Rendering an empty bubble
             // just adds noise.
             if (!isUser && !item.text.trim()) return null;
+            const cited = isUser ? [] : resolveSources(citedNumbers(item.text), sourceIndex);
             return (
               <div className={`bubble bubble--${isUser ? 'user' : 'assistant'}`} key={item.id}>
                 <div className="bubble__body">
@@ -83,7 +106,11 @@ export function Timeline({
                     isUser ? (
                       <p className="bubble__text">{item.text}</p>
                     ) : (
-                      <Markdown className="bubble__text bubble__text--prose" content={item.text} />
+                      <Markdown
+                        className="bubble__text bubble__text--prose"
+                        content={item.text}
+                        citations={sourceIndex}
+                      />
                     )
                   ) : (
                     <p className="bubble__text bubble__text--muted">(empty message)</p>
@@ -106,6 +133,9 @@ export function Timeline({
                     {formatClockTime(item.at)}
                   </time>
                 </div>
+                {cited.length > 0 && item.id === lastAnswerId ? (
+                  <SourcesRow sources={cited} />
+                ) : null}
               </div>
             );
           }

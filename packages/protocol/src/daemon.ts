@@ -11,6 +11,7 @@ import type {
   ApprovalRequest,
   ChatMessage,
   PlanStep,
+  Source,
   TaskState,
   TaskStatus,
 } from './types.js';
@@ -48,6 +49,8 @@ export type DaemonEvent =
       durationMs: number;
       data?: unknown;
       error?: { code: string; message: string };
+      /** Web sources this call contributed, numbered across the task. */
+      sources?: Source[];
       at: number;
     }
   | { type: 'task.artifact'; taskId: string; artifact: Artifact; at: number }

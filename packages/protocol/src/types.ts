@@ -74,6 +74,24 @@ export interface ToolResult {
   error?: ToolError;
   /** Wall-clock duration of the call in milliseconds. */
   durationMs?: number;
+  /**
+   * Web sources this call contributed, numbered across the whole task.
+   *
+   * The agent cites them inline as `[n]`; the UI turns those markers into
+   * links and renders a Perplexity-style source row underneath the answer.
+   */
+  sources?: Source[];
+}
+
+/** A web source the agent read or found while researching. */
+export interface Source {
+  /** Stable 1-based number used in inline citations, e.g. `[2]`. */
+  n: number;
+  title: string;
+  url: string;
+  /** Hostname without `www.`, used for the source badge. */
+  domain: string;
+  snippet?: string;
 }
 
 export interface ToolError {
@@ -159,6 +177,8 @@ export interface TaskState {
   scratch: Record<string, unknown>;
   /** Files created by the task so far. */
   artifacts: Artifact[];
+  /** Web sources this task has collected, numbered for citation. */
+  sources?: Source[];
   createdAt: number;
   updatedAt: number;
   error?: ToolError;
@@ -310,6 +330,7 @@ export interface ExtensionEvent {
     | 'network.captured'
     | 'challenge.detected'
     | 'session.expired'
+    | 'session.restored'
     | 'console.message'
     | 'human.required'
     | 'celeste:diagnostic';

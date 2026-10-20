@@ -424,6 +424,8 @@ describe('Agent', () => {
       sessionGuard: guard,
       autoApprove: true,
       maxSteps: 5,
+      // Pause immediately instead of waiting for the challenge to clear.
+      guardWaitMs: 0,
     });
 
     // Simulate a CAPTCHA appearing before the run starts.
@@ -439,4 +441,45 @@ describe('Agent', () => {
 
     expect(store.get(task.id)?.status).toBe('awaiting_human');
   });
+
+  it('resumes by itself when the guard clears mid-run', async () => {
+    const registry = new ToolRegistry();
+    registry.register(makeTool('noop', () => ({ summary: 'done' })) as never);
+
+    const guard = new SessionGuard();
+    const provider = new ScriptedProvider(
+      { id: 'scripted', kind: 'openai-compatible', label: 'Scripted', model: 'scripted-1' },
+      [assistant('{"steps":[{"description":"Go"}]}'), assistant('All done.')],
+    );
+    const agent = new Agent({
+      gateway: { chat: (_r: unknown) => provider.chat(_r as ChatRequest) } as never,
+      registry,
+      store,
+      bus,
+      approvals: new ApprovalManager(bus),
+      sessionGuard: guard,
+      autoApprove: true,
+      maxSteps: 5,
+      guardWaitMs: 5_000,
+    });
+
+    guard.ingest({
+      type: 'challenge.detected',
+      timestamp: Date.now(),
+      payload: { kind: 'cloudflare' },
+    });
+
+    const task = store.create('Belated');
+    store.appendMessage(task.id, { role: 'user', content: 'Belated' });
+
+    // The user solves the challenge a moment later.
+    const solved = setTimeout(() => {
+      guard.ingest({ type: 'page.navigated', timestamp: Date.now(), payload: { url: 'https://example.com' } });
+    }, 150);
+
+    await agent.run(task.id);
+    clearTimeout(solved);
+
+    expect(store.get(task.id)?.status).toBe('completed');
+  }, 10_000);
 });

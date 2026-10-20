@@ -759,6 +759,156 @@ function pickMainRoot(selector?: string): Element | null {
   return document.body ?? document.documentElement;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Search result extraction                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Unwraps the redirect links that search engines put around results.
+ *
+ * Bing, DuckDuckGo and Google all hand back an interstitial URL instead of
+ * the destination. The destination is either base64 or percent-encoded in a
+ * query parameter, so it can be recovered exactly.
+ */
+function unwrapSearchUrl(href: string): string {
+  try {
+    const url = new URL(href, location.href);
+
+    const bing = url.searchParams.get('u');
+    if (/(^|\.)bing\.com$/.test(url.hostname) && url.pathname.startsWith('/ck/a') && bing) {
+      const encoded = bing.replace(/^a1/, '').replace(/-/g, '+').replace(/_/g, '/');
+      const padded = encoded + '='.repeat((4 - (encoded.length % 4)) % 4);
+      try {
+        return atob(padded);
+      } catch {
+        return href;
+      }
+    }
+
+    const ddg = url.searchParams.get('uddg');
+    if (/duckduckgo\.com$/.test(url.hostname) && ddg) return ddg;
+
+    const google = url.searchParams.get('q') ?? url.searchParams.get('url');
+    if (/(^|\.)google\.com$/.test(url.hostname) && url.pathname === '/url' && google) {
+      return google;
+    }
+
+    return url.toString();
+  } catch {
+    return href;
+  }
+}
+
+/** Removes tracking parameters that make otherwise identical URLs distinct. */
+function stripTracking(href: string): string {
+  try {
+    const url = new URL(href);
+    const junk = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+      'gclid', 'fbclid', 'msclkid', 'mc_cid', 'mc_eid', 'ref_src', 'ref_url',
+    ];
+    for (const key of junk) url.searchParams.delete(key);
+    return url.toString();
+  } catch {
+    return href;
+  }
+}
+
+/** True for a link that plausibly points at a search result. */
+function looksLikeResult(anchor: HTMLAnchorElement): boolean {
+  const raw = anchor.getAttribute('href');
+  if (!raw || raw.startsWith('#') || raw.startsWith('javascript:')) return false;
+
+  let href: URL;
+  try {
+    href = new URL(raw, location.href);
+  } catch {
+    return false;
+  }
+  if (href.protocol !== 'http:' && href.protocol !== 'https:') return false;
+  if (href.hostname === location.hostname) return false;
+  // Engine-owned navigation, not a result.
+  if (/(^|\.)(bing|duckduckgo|brave|google|microsoft)\.(com|[a-z]{2,3})$/.test(href.hostname)) return false;
+  if (/\/(search|preferences|settings|account|login|signin)\b/.test(href.pathname)) return false;
+
+  // Chrome/nav links.
+  if (anchor.closest('header nav, footer, [role="navigation"]')) return false;
+
+  return collapse(anchor.textContent ?? '').length >= 8;
+}
+
+/** The text block that surrounds a result link. */
+function resultContainer(anchor: HTMLAnchorElement): Element {
+  let node: Element | null = anchor;
+  for (let depth = 0; depth < 5 && node; depth++) {
+    const text = collapse((node as HTMLElement).innerText ?? '');
+    const links = node.querySelectorAll('a[href]').length;
+    // A result block has some prose but is not a whole page of links.
+    if (text.length >= 60 && links <= 4) return node;
+    node = node.parentElement;
+  }
+  return anchor.parentElement ?? anchor;
+}
+
+export interface ExtractedSearchResult {
+  rank: number;
+  title: string;
+  url: string;
+  domain: string;
+  snippet: string;
+}
+
+/**
+ * Reads the results on a search engine page.
+ *
+ * Works from the live DOM of whatever engine is loaded: it does not depend on
+ * a particular engine's class names, so a redesign does not break it.
+ */
+function extractSearchResults(limit = 8): { engine: string; results: ExtractedSearchResult[] } {
+  const host = location.hostname.replace(/^www\./, '');
+  const engine =
+    host.includes('bing') ? 'bing'
+    : host.includes('duckduckgo') ? 'duckduckgo'
+    : host.includes('brave') ? 'brave'
+    : host.includes('google') ? 'google'
+    : host;
+
+  const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).filter(
+    looksLikeResult,
+  );
+
+  const seen = new Set<string>();
+  const results: ExtractedSearchResult[] = [];
+
+  for (const anchor of anchors) {
+    const url = stripTracking(unwrapSearchUrl(anchor.href));
+    if (seen.has(url)) continue;
+
+    const container = resultContainer(anchor);
+    const title =
+      collapse(anchor.innerText) ||
+      collapse(container.querySelector('h2, h3')?.textContent ?? '');
+    if (title.length < 8) continue;
+
+    const full = collapse((container as HTMLElement).innerText ?? '');
+    let snippet = full.startsWith(title) ? full.slice(title.length) : full;
+    snippet = snippet.replace(/\s+/g, ' ').trim().slice(0, 320);
+
+    let domain: string;
+    try {
+      domain = new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      continue;
+    }
+
+    seen.add(url);
+    results.push({ rank: results.length + 1, title: title.slice(0, 180), url, domain, snippet });
+    if (results.length >= limit) break;
+  }
+
+  return { engine, results };
+}
+
 function extractContent(selector?: string): {
   url: string;
   title: string;
@@ -1297,6 +1447,11 @@ async function invoke(method: string, params: Record<string, unknown>): Promise<
     case 'extract':
       return extractContent(params['selector'] as string | undefined);
 
+    case 'extractSearchResults':
+      return extractSearchResults(
+        typeof params['limit'] === 'number' ? params['limit'] : 8,
+      );
+
     case 'highlight': {
       const ref = params['ref'] as string | undefined;
       const el = requireElement(ref, 'highlight target');
@@ -1434,13 +1589,32 @@ function startMutationObserver(): void {
   observer.observe(target, { childList: true, subtree: true, attributes: true, characterData: false });
 }
 
+/**
+ * Watches for the site logging us out.
+ *
+ * The state is reported on *change* only: re-reporting every few seconds
+ * would keep the daemon's session guard latched forever, blocking every
+ * later task even after the user has moved on.
+ */
 function startSessionWatcher(): void {
+  let expiryReported = false;
+
   const check = (): void => {
     const result = detectSessionExpiry();
     if (result.expired) {
+      if (expiryReported) return;
+      expiryReported = true;
       void sendRuntimeMessage({
         type: 'celeste:event',
         event: { type: 'session.expired', payload: { url: location.href, reason: result.reason }, timestamp: Date.now() },
+      });
+      return;
+    }
+    if (expiryReported) {
+      expiryReported = false;
+      void sendRuntimeMessage({
+        type: 'celeste:event',
+        event: { type: 'session.restored', payload: { url: location.href }, timestamp: Date.now() },
       });
     }
   };

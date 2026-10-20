@@ -236,7 +236,6 @@ export function celesteReducer(
 
     case 'select':
       return { ...state, activeSessionId: action.id };
-
     case 'clearEvents':
       return { ...state, eventsBySession: {} };
 
@@ -283,7 +282,20 @@ export function celesteReducer(
         sessions = [applyEventToTask(blankTask(sessionId, event.title, event.at), event), ...sessions];
       }
 
-      return { ...state, eventsBySession, sessions };
+      // Follow new work: when a task starts, show it — unless the user is
+      // already looking at something that is still running.
+      let activeSessionId = state.activeSessionId;
+      if (event.type === 'task.created') {
+        const current = sessions.find((task) => task.id === activeSessionId);
+        const currentFinished =
+          !current ||
+          current.status === 'completed' ||
+          current.status === 'failed' ||
+          current.status === 'cancelled';
+        if (currentFinished) activeSessionId = sessionId;
+      }
+
+      return { ...state, eventsBySession, sessions, activeSessionId };
     }
 
     case 'artifacts':

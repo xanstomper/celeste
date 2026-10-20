@@ -724,6 +724,78 @@ async function download(command: BrowserCommand, params: Record<string, unknown>
 }
 
 /* -------------------------------------------------------------------------- */
+/* Web search                                                                 */
+/* -------------------------------------------------------------------------- */
+
+const SEARCH_ENGINES: Record<string, (query: string, limit: number) => string> = {
+  bing: (q, n) => `https://www.bing.com/search?q=${encodeURIComponent(q)}&count=${n}`,
+  duckduckgo: (q) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}&ia=web`,
+  brave: (q) => `https://search.brave.com/search?q=${encodeURIComponent(q)}`,
+  google: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+};
+
+/**
+ * Runs a web search in the user's real browser.
+ *
+ * Going through the browser instead of a bare HTTP request is deliberate:
+ * search engines aggressively block plain fetch clients, while the real
+ * browser — with its cookies, its fingerprint and its JavaScript — is exactly
+ * what they expect to see. The page is opened in a background tab, the
+ * results are read out of the live DOM, and the tab is closed again.
+ */
+async function search(command: BrowserCommand, params: Record<string, unknown>): Promise<unknown> {
+  const query = str(params, 'query')?.trim();
+  if (!query) throw new CelesteError('INVALID_ARGS', 'A search query is required.');
+
+  const engineName = str(params, 'engine') ?? 'bing';
+  const buildUrl = SEARCH_ENGINES[engineName];
+  if (!buildUrl) {
+    throw new CelesteError(
+      'INVALID_ARGS',
+      `Unknown search engine "${engineName}". Use bing, duckduckgo, brave or google.`,
+    );
+  }
+
+  const limit = Math.min(Math.max(num(params, 'limit') ?? 8, 1), 20);
+  const keepTab = params['keepTab'] === true;
+  const timeoutMs = command.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const url = buildUrl(query, limit);
+
+  // Open the engine in a background tab so the user's current page stays put.
+  const tab = await chrome.tabs.create({ url, active: false });
+  const tabId = tab.id;
+  if (typeof tabId !== 'number') {
+    throw new CelesteError('INTERNAL', 'The browser did not return a tab for the search.');
+  }
+
+  try {
+    await waitForLoad(tabId, timeoutMs, 'load');
+
+    // Give a client-rendered engine a moment to paint its results.
+    const deadline = Date.now() + 4_000;
+    let extracted: { results?: unknown[] } = {};
+    while (Date.now() < deadline) {
+      extracted = (await callContent(tabId, 'extractSearchResults', { limit })) as {
+        results?: unknown[];
+      };
+      if (Array.isArray(extracted.results) && extracted.results.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+
+    const results = Array.isArray(extracted.results) ? extracted.results : [];
+    return { engine: engineName, query, url, results };
+  } finally {
+    if (!keepTab) {
+      try {
+        await chrome.tabs.remove(tabId);
+      } catch {
+        /* the user may have closed it already */
+      }
+    }
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Entry point                                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -784,6 +856,8 @@ export async function dispatchCommand(command: BrowserCommand): Promise<unknown>
       return highlight(command, params);
     case 'download':
       return download(command, params);
+    case 'search':
+      return search(command, params);
     default:
       throw new CelesteError('INVALID_ARGS', `Unknown browser action: ${String(action)}`);
   }

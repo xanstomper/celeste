@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ModelGateway, loadConfig } from '@celeste/gateway';
 import type { CelesteConfig } from '@celeste/gateway';
 import { buildRegistry } from '@celeste/tools';
+import type { BrowserClient } from '@celeste/tools';
 import { Agent } from './agent/agent.js';
 import { ApprovalManager } from './agent/approval.js';
 import { BrowserBridge } from './browser/bridge.js';
@@ -119,11 +120,17 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const store = new TaskStore(config.dataDir ?? path.join(process.cwd(), '.celeste', 'data'));
   await store.load();
 
+  const browserClient: BrowserClient = {
+    isConnected: () => bridge.isConnected,
+    send: <T = unknown>(
+      action: string,
+      params?: Record<string, unknown>,
+      opts?: { tabId?: number; timeoutMs?: number },
+    ) => bridge.send<T>(action, params, opts),
+  };
+
   const registry = buildRegistry({
-    browser: {
-      isConnected: () => bridge.isConnected,
-      send: (action, params, opts) => bridge.send(action, params, opts),
-    },
+    browser: browserClient,
     allowedRoots: [process.cwd(), outputDir],
     browserTimeoutMs: config.browserTimeoutMs ?? 30_000,
   });
@@ -162,6 +169,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     bus,
     approvals,
     sessionGuard,
+    browser: browserClient,
     providerId: options.providerId,
     maxSteps: options.maxSteps ?? config.maxSteps ?? 40,
     outputDir,

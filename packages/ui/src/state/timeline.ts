@@ -14,6 +14,7 @@ import type {
   DaemonEvent,
   PlanStep,
   Role,
+  Source,
   TaskState,
   TaskStatus,
   ToolCall,
@@ -46,6 +47,8 @@ export interface ToolTimelineItem {
   durationMs: number;
   data: unknown;
   error: { code: string; message: string } | undefined;
+  /** Web sources this call contributed, numbered across the task. */
+  sources: Source[] | undefined;
 }
 
 export interface PlanTimelineItem {
@@ -316,6 +319,7 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
           summary: 'Running…',
           durationMs: 0,
           data: undefined,
+          sources: undefined,
           error: undefined,
         };
         toolIndex.set(event.callId, items.length);
@@ -337,6 +341,7 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
           durationMs: event.durationMs,
           data: event.data,
           error: event.error,
+          sources: event.sources,
         };
         if (idx === undefined) {
           toolIndex.set(event.callId, items.length);

@@ -4,12 +4,14 @@ export * from './browser-tools.js';
 export * from './file-tools.js';
 export * from './document-tools.js';
 export * from './memory-tools.js';
+export * from './search-tools.js';
 
 import { ToolRegistry } from './registry.js';
 import { createBrowserTools } from './browser-tools.js';
 import { createFileTools } from './file-tools.js';
 import { createDocumentTools } from './document-tools.js';
 import { createMemoryTools } from './memory-tools.js';
+import { createSearchTools } from './search-tools.js';
 import type { BrowserClient } from './types.js';
 
 export interface BuildRegistryOptions {
@@ -32,5 +34,6 @@ export function buildRegistry(options: BuildRegistryOptions): ToolRegistry {
   registry.registerAll(createFileTools({ allowedRoots: options.allowedRoots }));
   registry.registerAll(createDocumentTools());
   registry.registerAll(createMemoryTools());
+  registry.registerAll(createSearchTools());
   return registry;
 }

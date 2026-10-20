@@ -1,6 +1,27 @@
 import type { ToolCall, ToolDefinition } from '@celeste/protocol';
 import type { BrowserClient, ToolContext, ToolHandler } from './types.js';
 import { fail, ok } from './types.js';
+import { registerSource } from './search-tools.js';
+
+/**
+ * Registers a page the agent just read as a citable source.
+ *
+ * Every page the agent actually reads earns a number, so an answer can point
+ * at the exact page a claim came from.
+ */
+function citePage(
+  ctx: ToolContext,
+  url: string | undefined,
+  title: string | undefined,
+  body: string | undefined,
+) {
+  if (!url || !/^https?:\/\//i.test(url)) return undefined;
+  return registerSource(ctx.scratch, {
+    url,
+    ...(title ? { title } : {}),
+    ...(body ? { snippet: body.replace(/\s+/g, ' ').trim().slice(0, 300) } : {}),
+  });
+}
 
 /**
  * Browser tools.
@@ -296,7 +317,11 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
       );
       if (isFailure(result)) return result;
       const data = result as { markdown?: string; title?: string; url?: string };
-      return ok(call, `Extracted ${(data.markdown ?? '').length} characters`, data, data.markdown ?? '');
+      const source = citePage(ctx, data.url, data.title, data.markdown);
+      return {
+        ...ok(call, `Extracted ${(data.markdown ?? '').length} characters`, data, data.markdown ?? ''),
+        ...(source ? { sources: [source] } : {}),
+      };
     },
   };
 
@@ -315,10 +340,26 @@ export function createBrowserTools(deps: BrowserToolDeps): ToolHandler[] {
       const call = toCall(ctx, 'browser_get_text');
       const params: Record<string, unknown> = {};
       if (args.selector) params.selector = String(args.selector);
-      const result = await send<{ text?: string }>(call, 'getText', params);
+      const result = await send<{ text?: string; url?: string; title?: string }>(call, 'getText', params);
       if (isFailure(result)) return result;
-      const data = result as { text?: string };
-      return ok(call, `Read ${(data.text ?? '').length} characters`, data, data.text ?? '');
+      const data = result as { text?: string; url?: string; title?: string };
+      // getText does not report the URL, so ask the page for it.
+      let url = data.url;
+      if (!url) {
+        const meta = await send<{ url?: string; title?: string }>(call, 'evaluate', {
+          expression: '({ url: location.href, title: document.title })',
+        });
+        if (!isFailure(meta)) {
+          const info = meta as { url?: string; title?: string };
+          url = info.url;
+          data.title = data.title ?? info.title;
+        }
+      }
+      const source = citePage(ctx, url, data.title, data.text);
+      return {
+        ...ok(call, `Read ${(data.text ?? '').length} characters`, data, data.text ?? ''),
+        ...(source ? { sources: [source] } : {}),
+      };
     },
   };
 

@@ -5,6 +5,7 @@ import { App } from './App';
 import './styles/theme.css';
 import './styles/app.css';
 import './styles/markdown.css';
+import './styles/sources.css';
 import './styles/panel.css';
 
 const container = document.getElementById('root');

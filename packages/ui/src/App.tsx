@@ -274,6 +274,7 @@ function Workspace() {
                 void actions.respondApproval(requestId, decision)
               }
               busy={state.busy}
+              taskSources={activeTask?.sources}
             />
           </div>
 

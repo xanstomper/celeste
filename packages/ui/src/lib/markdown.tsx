@@ -1,5 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 
+import type { Source } from '@celeste/protocol';
+
 /**
  * A small Markdown renderer.
  *
@@ -110,10 +112,15 @@ export function parseBlocks(source: string): Block[] {
 /* Inline rendering                                                           */
 /* -------------------------------------------------------------------------- */
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)|(\[[^\]]+\]\([^)\s]+\))/;
+const INLINE =
+  /(`[^`]+`)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)|(\[[^\]]+\]\([^)\s]+\))|(\[\d{1,3}(?:\s*,\s*\d{1,3})*\])/;
 
-/** Renders inline Markdown — code, bold, italic and links. */
-export function renderInline(text: string, keyPrefix = 'i'): ReactNode[] {
+/** Renders inline Markdown — code, bold, italic, links and citations. */
+export function renderInline(
+  text: string,
+  keyPrefix = 'i',
+  citations?: Map<number, Source>,
+): ReactNode[] {
   const out: ReactNode[] = [];
   let rest = text;
   let n = 0;
@@ -138,8 +145,38 @@ export function renderInline(text: string, keyPrefix = 'i'): ReactNode[] {
     } else if (token.startsWith('**') || token.startsWith('__')) {
       out.push(
         <strong key={key}>
-          {renderInline(token.slice(2, -2), `${key}-b`)}
+          {renderInline(token.slice(2, -2), `${key}-b`, citations)}
         </strong>,
+      );
+    } else if (/^\[\d/.test(token)) {
+      // A citation: [3] or [1, 4].
+      const numbers = token
+        .slice(1, -1)
+        .split(',')
+        .map((part) => Number(part.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      out.push(
+        <span className="md__cites" key={key}>
+          {numbers.map((n, index) => {
+            const source = citations?.get(n);
+            return source ? (
+              <a
+                className="md__cite"
+                key={`${key}-${n}-${index}`}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={source.title}
+              >
+                {n}
+              </a>
+            ) : (
+              <span className="md__cite md__cite--plain" key={`${key}-${n}-${index}`}>
+                {n}
+              </span>
+            );
+          })}
+        </span>,
       );
     } else if (token.startsWith('[')) {
       const link = /\[([^\]]+)\]\(([^)\s]+)\)/.exec(token);
@@ -159,7 +196,7 @@ export function renderInline(text: string, keyPrefix = 'i'): ReactNode[] {
     } else {
       out.push(
         <em key={key}>
-          {renderInline(token.slice(1, -1), `${key}-i`)}
+          {renderInline(token.slice(1, -1), `${key}-i`, citations)}
         </em>,
       );
     }
@@ -177,10 +214,12 @@ export function renderInline(text: string, keyPrefix = 'i'): ReactNode[] {
 export interface MarkdownProps {
   content: string;
   className?: string;
+  /** Resolves `[n]` markers to real pages. */
+  citations?: Map<number, Source>;
 }
 
 /** Renders a Markdown document as React elements. */
-export function Markdown({ content, className }: MarkdownProps): ReactNode {
+export function Markdown({ content, className, citations }: MarkdownProps): ReactNode {
   const blocks = parseBlocks(content ?? '');
 
   if (blocks.length === 0) {
@@ -195,14 +234,14 @@ export function Markdown({ content, className }: MarkdownProps): ReactNode {
           case 'p':
             return (
               <p className="md__p" key={key}>
-                {renderInline(block.text, key)}
+                {renderInline(block.text, key, citations)}
               </p>
             );
           case 'ul':
             return (
               <ul className="md__ul" key={key}>
                 {block.items.map((item, i) => (
-                  <li key={`${key}-${i}`}>{renderInline(item, `${key}-${i}`)}</li>
+                  <li key={`${key}-${i}`}>{renderInline(item, `${key}-${i}`, citations)}</li>
                 ))}
               </ul>
             );
@@ -210,14 +249,14 @@ export function Markdown({ content, className }: MarkdownProps): ReactNode {
             return (
               <ol className="md__ol" key={key}>
                 {block.items.map((item, i) => (
-                  <li key={`${key}-${i}`}>{renderInline(item, `${key}-${i}`)}</li>
+                  <li key={`${key}-${i}`}>{renderInline(item, `${key}-${i}`, citations)}</li>
                 ))}
               </ol>
             );
           case 'quote':
             return (
               <blockquote className="md__quote" key={key}>
-                {renderInline(block.text, key)}
+                {renderInline(block.text, key, citations)}
               </blockquote>
             );
           case 'code':

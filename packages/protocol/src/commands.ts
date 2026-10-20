@@ -55,6 +55,30 @@ export interface BrowserCommandMap {
   console: { action: 'list' | 'clear' };
   highlight: { ref: string };
   download: { action: 'list' | 'save'; path?: string };
+  search: {
+    query: string;
+    engine?: 'bing' | 'duckduckgo' | 'brave' | 'google';
+    limit?: number;
+    /** Keep the search tab open when true. Default false. */
+    keepTab?: boolean;
+  };
+}
+
+/** A single web search result. */
+export interface SearchResult {
+  /** Stable 1-based rank within this search. */
+  rank: number;
+  title: string;
+  url: string;
+  domain: string;
+  snippet: string;
+}
+
+export interface SearchResponse {
+  engine: string;
+  query: string;
+  url: string;
+  results: SearchResult[];
 }
 
 export type BrowserAction = keyof BrowserCommandMap;

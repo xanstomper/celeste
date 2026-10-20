@@ -46,17 +46,51 @@ export class SessionGuard extends EventEmitter {
   ingest(event: ExtensionEvent): SessionStatus | null {
     switch (event.type) {
       case 'challenge.detected': {
-        const payload = (event.payload ?? {}) as { kind?: string; confidence?: number };
-        return this.transition('challenge', `Verification challenge detected${payload.kind ? ` (${payload.kind})` : ''}. Human intervention required.`);
+        const payload = (event.payload ?? {}) as {
+          kind?: string;
+          confidence?: number;
+          detected?: boolean;
+        };
+        // The detector reports when the challenge goes away, so the guard
+        // does not stay latched and block every later task.
+        if (payload.detected === false) {
+          return this.transition('ok', 'Verification cleared.');
+        }
+        return this.transition(
+          'challenge',
+          `Verification challenge detected${payload.kind ? ` (${payload.kind})` : ''}. Human intervention required.`,
+        );
       }
       case 'session.expired': {
         const payload = (event.payload ?? {}) as { url?: string; reason?: string };
-        return this.transition('expired', payload.reason ?? 'The site logged you out. Please sign in again.');
+        return this.transition(
+          'expired',
+          payload.reason ?? 'The site logged you out. Please sign in again.',
+        );
+      }
+      case 'session.restored': {
+        return this.transition('ok', 'Session restored.');
       }
       case 'page.navigated': {
         const payload = (event.payload ?? {}) as { url?: string };
-        // A fresh navigation away from a login page clears a stale expiry.
-        if (this.status.health === 'expired' && payload.url && !/\/(login|signin|sign-in)/i.test(payload.url)) {
+        // A new page is a new context: whatever was blocking on the old page
+        // is no longer blocking now.
+        if (
+          (this.status.health === 'expired' || this.status.health === 'challenge') &&
+          payload.url &&
+          !/\/(login|signin|sign-in|log-in|auth)(?:[/?#]|$)/i.test(payload.url)
+        ) {
+          return this.transition('ok', 'Session restored.');
+        }
+        return null;
+      }
+      case 'page.loaded': {
+        const payload = (event.payload ?? {}) as { url?: string };
+        if (
+          (this.status.health === 'expired' || this.status.health === 'challenge') &&
+          payload.url &&
+          !/\/(login|signin|sign-in|log-in|auth)(?:[/?#]|$)/i.test(payload.url)
+        ) {
           return this.transition('ok', 'Session restored.');
         }
         return null;

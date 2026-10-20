@@ -85,7 +85,12 @@ export class ToolRegistry {
     const started = Date.now();
     try {
       const result = await handler.execute(call.arguments, ctx);
-      return { ...result, durationMs: result.durationMs ?? Date.now() - started };
+      return {
+        ...result,
+        id: call.id,
+        name: call.name,
+        durationMs: result.durationMs ?? Date.now() - started,
+      };
     } catch (err) {
       const error = CelesteError.from(err);
       const shape = error.toShape();

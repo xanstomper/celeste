@@ -53,6 +53,8 @@ export interface ToolContext {
   bus: { publish(event: DaemonEvent): void };
   /** Access to the task store (read task state, artifacts). */
   store: { get(id: string): TaskState | undefined };
+  /** The browser, for tools that drive it directly (search, reading). */
+  browser?: BrowserClient;
   /** Per-task scratchpad. */
   scratch: ScratchStore;
   /** Where generated files should be written. */
@@ -63,10 +65,21 @@ export interface ToolContext {
   emitArtifact(artifact: Artifact): void;
 }
 
+/**
+ * What a tool handler returns.
+ *
+ * `id` and `name` are optional: the registry stamps them from the call it is
+ * executing, so handlers only have to describe the outcome.
+ */
+export type ToolOutcome = Omit<ToolResult, 'id' | 'name'> & {
+  id?: string;
+  name?: string;
+};
+
 /** A tool implementation. */
 export interface ToolHandler {
   definition: ToolDefinition;
-  execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
+  execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome>;
 }
 
 /** Convenience helper for building a successful tool result. */
