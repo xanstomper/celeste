@@ -102,7 +102,8 @@ const DEFAULT_SETTINGS: Settings = {
   autoApprove: false,
   extensionPort: 9126,
   apiBase: '',
-  theme: 'dark',
+  // Light first, like Perplexity's assistant panel.
+  theme: 'light',
 };
 
 function loadSettings(): Settings {

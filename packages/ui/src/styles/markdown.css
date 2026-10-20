@@ -1,0 +1,127 @@
+/* -------------------------------------------------------------------------- */
+/* Markdown + Perplexity prose                                                 */
+/* -------------------------------------------------------------------------- */
+
+.md {
+  color: var(--text);
+  font-size: var(--font-body);
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.md > *:first-child {
+  margin-top: 0;
+}
+
+.md > *:last-child {
+  margin-bottom: 0;
+}
+
+.md__p {
+  margin: 0 0 10px;
+}
+
+.md__ul,
+.md__ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.md__ul {
+  list-style: disc;
+}
+
+.md__ol {
+  list-style: decimal;
+}
+
+.md__ul li,
+.md__ol li {
+  margin: 3px 0;
+}
+
+.md__ul li::marker {
+  color: var(--text-faint);
+}
+
+.md__quote {
+  margin: 0 0 10px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--accent);
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.md__pre {
+  position: relative;
+  margin: 0 0 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.md__pre code {
+  font-family: inherit;
+}
+
+.md__lang {
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.md__code {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--accent-strong);
+}
+
+.md__link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-accent);
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.md__link:hover {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent-strong);
+}
+
+.md__hr {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* The assistant writes prose, not bubbles: Perplexity style. */
+.bubble__text--prose {
+  margin: 0;
+}
+
+/* In the side panel the assistant answer reads as a document. */
+html[data-celeste-panel='true'] .bubble--assistant .bubble__body {
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+}
+
+html[data-celeste-panel='true'] .bubble--user .bubble__body {
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-xs);
+}

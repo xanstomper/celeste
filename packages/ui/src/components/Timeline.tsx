@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { formatClockTime } from '../lib/format';
+import { Markdown } from '../lib/markdown';
 import type { TimelineItem } from '../state/timeline';
 import { ApprovalCard } from './ApprovalCard';
 import { ArtifactCard } from './ArtifactCard';
@@ -71,11 +72,19 @@ export function Timeline({
           case 'message': {
             if (item.role === 'tool') return null;
             const isUser = item.role === 'user';
+            // An assistant turn that only requested tools has no prose of its
+            // own — the tool card says everything. Rendering an empty bubble
+            // just adds noise.
+            if (!isUser && !item.text.trim()) return null;
             return (
               <div className={`bubble bubble--${isUser ? 'user' : 'assistant'}`} key={item.id}>
                 <div className="bubble__body">
                   {item.text ? (
-                    <p className="bubble__text">{item.text}</p>
+                    isUser ? (
+                      <p className="bubble__text">{item.text}</p>
+                    ) : (
+                      <Markdown className="bubble__text bubble__text--prose" content={item.text} />
+                    )
                   ) : (
                     <p className="bubble__text bubble__text--muted">(empty message)</p>
                   )}

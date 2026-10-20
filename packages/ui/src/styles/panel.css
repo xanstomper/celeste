@@ -1,0 +1,74 @@
+/* -------------------------------------------------------------------------- */
+/* Perplexity panel mode                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The client is embedded in the browser as a side panel, roughly 400px wide.
+ * In that context the session list and the status bar are noise: the panel is
+ * one thread, one composer, one status line.
+ */
+
+html[data-celeste-panel='true'] {
+  --sidebar-w: 0px;
+}
+
+html[data-celeste-panel='true'] body,
+html[data-celeste-panel='true'] .celeste-panel-body {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* The panel is a single column: thread on top, composer pinned below. */
+html[data-celeste-panel='true'] .app {
+  height: 100vh;
+  grid-template-rows: auto 1fr auto;
+}
+
+html[data-celeste-panel='true'] .sidebar,
+html[data-celeste-panel='true'] .titlebar__sidebar-toggle {
+  display: none;
+}
+
+/* Tighten the chrome: the panel is narrow, so every pixel counts. */
+html[data-celeste-panel='true'] .titlebar {
+  padding: 0 12px;
+  gap: 8px;
+}
+
+html[data-celeste-panel='true'] .brand__tag {
+  display: none;
+}
+
+html[data-celeste-panel='true'] .main {
+  padding: 0;
+}
+
+html[data-celeste-panel='true'] .main__timeline {
+  padding: 12px 14px 8px;
+}
+
+html[data-celeste-panel='true'] .main__composer {
+  padding: 8px 12px 12px;
+}
+
+html[data-celeste-panel='true'] .bubble--user .bubble__body {
+  max-width: 92%;
+}
+
+html[data-celeste-panel='true'] .statusbar {
+  font-size: 10.5px;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+html[data-celeste-panel='true'] .statusbar__version,
+html[data-celeste-panel='true'] .statusbar__spacer {
+  display: none;
+}
+
+/* The standalone app keeps its full chrome. */
+@media (min-width: 640px) {
+  html[data-celeste-panel='true'] .sidebar {
+    display: flex;
+  }
+}

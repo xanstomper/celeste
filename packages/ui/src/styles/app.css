@@ -761,7 +761,7 @@ button {
 
 .bubble--user .bubble__body {
   border-color: var(--border-accent);
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.16), rgba(99, 102, 241, 0.09));
+  background: var(--bubble-user);
   border-bottom-right-radius: var(--radius-xs);
 }
 
@@ -1084,7 +1084,7 @@ button {
   background: linear-gradient(
     180deg,
     rgba(251, 191, 36, 0.09),
-    rgba(99, 102, 241, 0.05) 55%,
+    var(--accent-softer) 55%,
     transparent
   );
   box-shadow: var(--shadow-md);
