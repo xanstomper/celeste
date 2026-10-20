@@ -9,7 +9,7 @@
  *   node scripts/build.mjs --watch   # rebuild on change
  */
 
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,6 +48,30 @@ function copyPanel() {
   console.log('[celeste:extension] side panel client copied → dist/panel/');
 }
 
+/**
+ * Chrome caches an unpacked extension's service-worker script inside the
+ * profile and only refreshes it when the extension's version changes. Without
+ * this stamp a rebuilt `background.js` silently keeps running the previous
+ * code until the browser is launched into a brand-new profile — which looks
+ * exactly like a fix that does not work.
+ *
+ * The stamp lives in `dist/` only: `public/manifest.json` keeps the real
+ * product version.
+ */
+function stampVersion() {
+  const file = path.join(root, 'dist', 'manifest.json');
+  if (!existsSync(file)) return;
+
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  const now = Date.now();
+  const day = Math.floor(now / 86_400_000) % 1000;
+  const second = Math.floor((now % 86_400_000) / 1000) % 65_535;
+  manifest.version = `0.${day}.${second}`;
+
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(`[celeste:extension] manifest version stamped ${manifest.version}`);
+}
+
 await ensureIcons();
 
 for (const mode of TARGETS) {
@@ -62,5 +86,6 @@ for (const mode of TARGETS) {
 }
 
 copyPanel();
+stampVersion();
 
 console.log('[celeste:extension] build complete → dist/');

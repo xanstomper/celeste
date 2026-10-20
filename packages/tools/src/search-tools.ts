@@ -97,7 +97,10 @@ export interface SearchToolOptions {
 }
 
 export function createSearchTools(options: SearchToolOptions = {}): ToolHandler[] {
-  const defaultEngine = options.engine ?? 'bing';
+  // DuckDuckGo answers a plain query box honestly: no personalisation, no
+  // "helpful" rewrite of a long query into its first word. Bing is kept as
+  // the fallback, which the extension switches to automatically.
+  const defaultEngine = options.engine ?? 'duckduckgo';
 
   const webSearch: ToolHandler = {
     definition: def(

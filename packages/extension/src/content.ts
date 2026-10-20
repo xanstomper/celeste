@@ -837,6 +837,23 @@ function looksLikeResult(anchor: HTMLAnchorElement): boolean {
   return collapse(anchor.textContent ?? '').length >= 8;
 }
 
+/** Where each engine keeps one whole result. */
+const ENGINE_RESULT_SELECTOR: Record<string, string[]> = {
+  bing: ['li.b_algo'],
+  duckduckgo: ['article[data-testid="result"]', 'article[data-testid="result-instance"]'],
+  brave: ['.snippet[data-type="web"]', '.snippet'],
+  google: ['div.g', 'div[data-hveid]'],
+};
+
+/** The nearest element that holds one complete result. */
+function preferredContainer(anchor: HTMLAnchorElement, engine: string): Element | null {
+  for (const selector of ENGINE_RESULT_SELECTOR[engine] ?? []) {
+    const found = anchor.closest(selector);
+    if (found) return found;
+  }
+  return null;
+}
+
 /** The text block that surrounds a result link. */
 function resultContainer(anchor: HTMLAnchorElement): Element {
   let node: Element | null = anchor;
@@ -884,15 +901,39 @@ function extractSearchResults(limit = 8): { engine: string; results: ExtractedSe
     const url = stripTracking(unwrapSearchUrl(anchor.href));
     if (seen.has(url)) continue;
 
-    const container = resultContainer(anchor);
-    const title =
-      collapse(anchor.innerText) ||
-      collapse(container.querySelector('h2, h3')?.textContent ?? '');
+    const container = preferredContainer(anchor, engine) ?? resultContainer(anchor);
+    // A result's own heading is the title. The anchor often wraps a
+    // breadcrumb ("https://science.nasa.gov › mission › webb") instead, which
+    // is useful context but a terrible title.
+    const headingLink = container.querySelector(
+      'a[data-testid="result-title-a"], h2 a, h3 a',
+    );
+    const heading = collapse(
+      headingLink?.textContent ?? container.querySelector('h2, h3')?.textContent ?? '',
+    );
+    const anchorText = collapse(anchor.innerText);
+    const title = heading.length >= 8 ? heading : anchorText;
     if (title.length < 8) continue;
+    if (/^https?:\/\//i.test(title) || title.includes(' › ')) continue;
 
+    // Each engine marks its description line. Reading it directly is far more
+    // reliable than subtracting the title from the block's text, which leaves
+    // the site name and the breadcrumb behind.
+    const snippetNode = container.querySelector(
+      '[data-result="snippet"], .result__snippet, .b_caption p, .snippet-description, .VwiC3b, .b_snippet',
+    );
     const full = collapse((container as HTMLElement).innerText ?? '');
-    let snippet = full.startsWith(title) ? full.slice(title.length) : full;
-    snippet = snippet.replace(/\s+/g, ' ').trim().slice(0, 320);
+    let snippet = snippetNode
+      ? collapse(snippetNode.textContent ?? '')
+      : full.replace(title, '').trim();
+    // Whatever is left, a URL and its breadcrumb is never part of a summary.
+    snippet = snippet
+      .replace(/https?:\/\/\S+(?:\s*›\s*\S+)*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 320);
+    // A stray date or site name is worse than no summary at all.
+    if (snippet.length < 40) snippet = '';
 
     let domain: string;
     try {

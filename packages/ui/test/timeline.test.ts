@@ -133,6 +133,28 @@ describe('timeline suggestions', () => {
     expect(merged.at(-1)?.kind).toBe('suggestions');
   });
 
+  it('does not decorate a successful run with a completion divider', () => {
+    const items = buildTimeline([
+      { type: 'task.status', taskId: 't', status: 'running', at: 1 },
+      { type: 'task.status', taskId: 't', status: 'completed', at: 2 },
+      { type: 'task.done', taskId: 't', status: 'completed', at: 3 },
+    ]);
+
+    expect(items.filter((item) => item.kind === 'status')).toHaveLength(0);
+  });
+
+  it('marks a run that ended badly', () => {
+    const items = buildTimeline([
+      { type: 'task.status', taskId: 't', status: 'running', at: 1 },
+      { type: 'task.status', taskId: 't', status: 'failed', at: 2 },
+      { type: 'task.done', taskId: 't', status: 'failed', at: 3 },
+    ]);
+
+    const statuses = items.filter((item) => item.kind === 'status');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]?.kind === 'status' && statuses[0].status).toBe('failed');
+  });
+
   it('stores questions in the snapshot of a restored task', () => {
     const task = {
       id: 't',

@@ -89,7 +89,11 @@ export class BrowserBridge extends EventEmitter {
    */
   private ping(): void {
     const now = Date.now();
-    const staleAfter = this.options.heartbeatTimeoutMs ?? 45_000;
+    // Manifest V3 suspends an idle worker, and a suspended worker does not
+    // answer pings even though its socket is fine. Give it a long window: a
+    // browser that is really gone shows up as a closed socket or a command
+    // timeout, not as two missed heartbeats.
+    const staleAfter = this.options.heartbeatTimeoutMs ?? 120_000;
 
     for (const client of [...this.clients.values()]) {
       if (now - client.lastSeenAt <= staleAfter) continue;

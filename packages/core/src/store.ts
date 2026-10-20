@@ -119,6 +119,19 @@ export class TaskStore {
         const raw = await fs.readFile(path.join(dir, file), 'utf8');
         const task = JSON.parse(raw) as TaskState;
         if (task?.id) {
+          // A task that was mid-flight when the process died has no run
+          // behind it any more. Leaving it "running" would make the panel
+          // spin forever on work nobody is doing.
+          if (task.status === 'running' || task.status === 'awaiting_approval') {
+            task.status = 'failed';
+            task.error = {
+              code: 'CANCELLED',
+              message: 'The daemon restarted while this task was running.',
+              retryable: true,
+            };
+            task.updatedAt = Date.now();
+            this.dirty.add(task.id);
+          }
           this.tasks.set(task.id, task);
           count++;
         }

@@ -99,14 +99,19 @@ export function useSessionEvents(
 export function useGlobalEvents(
   transport: DaemonTransport | null,
   onEvent: (event: DaemonEvent) => void,
+  onReconnect?: () => void,
 ): void {
   const stable = useStableCallback(onEvent);
+  const stableReconnect = useStableCallback(onReconnect ?? (() => undefined));
 
   useEffect(() => {
     if (!transport) return;
-    const unsubscribe = transport.subscribeGlobal((event) => {
-      stable(event);
-    });
+    const unsubscribe = transport.subscribeGlobal(
+      (event) => {
+        stable(event);
+      },
+      () => stableReconnect(),
+    );
     return unsubscribe;
-  }, [transport, stable]);
+  }, [transport, stable, stableReconnect]);
 }

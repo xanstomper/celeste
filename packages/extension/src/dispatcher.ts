@@ -728,7 +728,9 @@ async function download(command: BrowserCommand, params: Record<string, unknown>
 /* -------------------------------------------------------------------------- */
 
 const SEARCH_ENGINES: Record<string, (query: string, limit: number) => string> = {
-  bing: (q, n) => `https://www.bing.com/search?q=${encodeURIComponent(q)}&count=${n}`,
+  // `form=QBLH` matters: without it Bing sometimes serves a degraded page that
+  // matches only the first word of the query.
+  bing: (q, n) => `https://www.bing.com/search?q=${encodeURIComponent(q)}&count=${n}&form=QBLH`,
   duckduckgo: (q) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}&ia=web`,
   brave: (q) => `https://search.brave.com/search?q=${encodeURIComponent(q)}`,
   google: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
@@ -747,18 +749,40 @@ async function search(command: BrowserCommand, params: Record<string, unknown>):
   const query = str(params, 'query')?.trim();
   if (!query) throw new CelesteError('INVALID_ARGS', 'A search query is required.');
 
-  const engineName = str(params, 'engine') ?? 'bing';
-  const buildUrl = SEARCH_ENGINES[engineName];
-  if (!buildUrl) {
+  const requested = str(params, 'engine') ?? 'duckduckgo';
+  if (!SEARCH_ENGINES[requested]) {
     throw new CelesteError(
       'INVALID_ARGS',
-      `Unknown search engine "${engineName}". Use bing, duckduckgo, brave or google.`,
+      `Unknown search engine "${requested}". Use bing, duckduckgo, brave or google.`,
     );
   }
 
   const limit = Math.min(Math.max(num(params, 'limit') ?? 8, 1), 20);
   const keepTab = params['keepTab'] === true;
   const timeoutMs = command.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  const first = await searchPage(requested, query, limit, timeoutMs, keepTab);
+
+  // An engine will occasionally serve a degraded page, or a bot check instead
+  // of results. A different engine costs a few seconds and rescues the answer.
+  if (first.results.length > 0) return first;
+
+  const fallback = requested === 'duckduckgo' ? 'bing' : 'duckduckgo';
+  const second = await searchPage(fallback, query, limit, timeoutMs, keepTab);
+  return second.results.length > 0 ? second : first;
+}
+
+/** Runs one search in a background tab and reads the results out of it. */
+async function searchPage(
+  engineName: string,
+  query: string,
+  limit: number,
+  timeoutMs: number,
+  keepTab: boolean,
+): Promise<{ engine: string; query: string; url: string; results: unknown[] }> {
+  const buildUrl = SEARCH_ENGINES[engineName];
+  if (!buildUrl) throw new CelesteError('INVALID_ARGS', `Unknown search engine "${engineName}".`);
+
   const url = buildUrl(query, limit);
 
   // Open the engine in a background tab so the user's current page stays put.
@@ -782,8 +806,12 @@ async function search(command: BrowserCommand, params: Record<string, unknown>):
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
 
-    const results = Array.isArray(extracted.results) ? extracted.results : [];
-    return { engine: engineName, query, url, results };
+    return {
+      engine: engineName,
+      query,
+      url,
+      results: Array.isArray(extracted.results) ? extracted.results : [],
+    };
   } finally {
     if (!keepTab) {
       try {

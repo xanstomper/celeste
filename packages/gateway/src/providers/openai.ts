@@ -63,6 +63,8 @@ export class OpenAiCompatibleProvider implements ModelProvider {
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
     const body = this.buildBody(request);
+    // One retry, not three: the gateway falls back to another provider, which
+    // is a better recovery than hammering a provider that is not answering.
     const res = await withRetry(async () => {
       const response = await httpRequest({
         url: `${this.baseUrl}/chat/completions`,
@@ -70,6 +72,7 @@ export class OpenAiCompatibleProvider implements ModelProvider {
         headers: this.buildHeaders(),
         body,
         signal: request.signal,
+        timeoutMs: this.config.timeoutMs ?? 90_000,
       });
       if (!response.ok) {
         const detail = this.extractError(response.text);
@@ -80,7 +83,7 @@ export class OpenAiCompatibleProvider implements ModelProvider {
         );
       }
       return response;
-    });
+    }, { attempts: 2, baseDelayMs: 800, signal: request.signal });
 
     const payload = res.json<OpenAiResponse>();
     if (payload.error) {

@@ -279,7 +279,20 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
         return;
 
       case 'task.status': {
-        if (event.status === 'queued' || event.status === 'running') return;
+        // Live progress only. A terminal status is rendered from `task.done`,
+        // which is the single authoritative end-of-run marker — otherwise the
+        // thread shows the same "completed" row twice.
+        if (
+          event.status === 'queued' ||
+          event.status === 'running' ||
+          event.status === 'completed' ||
+          event.status === 'failed' ||
+          event.status === 'cancelled'
+        ) {
+          return;
+        }
+        const previous = items[items.length - 1];
+        if (previous?.kind === 'status' && previous.status === event.status) return;
         items.push({
           kind: 'status',
           id: key,
@@ -426,6 +439,11 @@ export function buildTimeline(events: readonly DaemonEvent[]): TimelineItem[] {
             : event.status === 'failed'
               ? 'failed'
               : 'cancelled';
+
+        // A finished answer speaks for itself — the header already says
+        // "completed". Only an abnormal ending is worth a divider.
+        if (status === 'completed') return;
+
         items.push({
           kind: 'status',
           id: key,

@@ -143,7 +143,12 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
   /* Stream events for the active session and for the whole daemon. */
   const transport = transportRef.current;
   useSessionEvents(transport, state.activeSessionId, applyTransportEvent);
-  useGlobalEvents(transport, applyTransportEvent);
+  useGlobalEvents(transport, applyTransportEvent, () => {
+    // The daemon restarted (or came back): refill the session list so the
+    // panel is not left showing a snapshot from before the gap.
+    const current = transportRef.current;
+    if (current) void hydrate(current);
+  });
 
   /* Persist + reflect theme changes. */
   useEffect(() => {

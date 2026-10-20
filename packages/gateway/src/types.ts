@@ -31,6 +31,12 @@ export interface ProviderConfig {
   apiKeyEnv?: string;
   /** Extra headers sent with every request. */
   headers?: Record<string, string>;
+  /**
+   * How long a single request may take before it is abandoned, in ms.
+   * Free providers can hang rather than fail, so this is what keeps a task
+   * moving. Defaults to 90s.
+   */
+  timeoutMs?: number;
   /** Maximum tokens to request. */
   maxTokens?: number;
   /** Sampling temperature. */

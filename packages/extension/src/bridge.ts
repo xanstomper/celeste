@@ -28,7 +28,6 @@ export { WORKER_INSTANCE_ID };
 const MAX_BACKOFF_MS = 30_000;
 const BASE_BACKOFF_MS = 500;
 /** Force a reconnect if the socket has been silent for this long. */
-const STALE_SOCKET_MS = 45_000;
 
 export class Bridge {
   private socket: WebSocket | null = null;
@@ -36,6 +35,10 @@ export class Bridge {
   private connectedAt: number | undefined;
   private lastError: string | undefined;
   private latencyMs: number | undefined;
+  /** When the last ping went out, so a pong can be turned into a round-trip. */
+  private pingSentAt: number | undefined;
+  /** When the daemon last proved it was listening. */
+  private lastPongAt: number | undefined;
   private connecting = false;
   /** Stack of the most recent connect() call, for diagnosing loops. */
   private lastConnectStack = '';
@@ -62,6 +65,8 @@ export class Bridge {
       ...(this.connectedAt !== undefined ? { connectedAt: this.connectedAt } : {}),
       ...(this.lastError !== undefined ? { lastError: this.lastError } : {}),
       ...(this.latencyMs !== undefined ? { latencyMs: this.latencyMs } : {}),
+      ...(this.lastPongAt !== undefined ? { lastPongAgoMs: Date.now() - this.lastPongAt } : {}),
+      ...(this.pingSentAt !== undefined ? { pingOutstandingMs: Date.now() - this.pingSentAt } : {}),
     };
   }
 
@@ -202,6 +207,10 @@ export class Bridge {
     socket.onopen = () => {
       this.attempts = 0;
       this.connectedAt = Date.now();
+      this.latencyMs = undefined;
+      this.pingSentAt = undefined;
+      // Grace period: the link is fresh, nothing has gone unanswered yet.
+      this.lastPongAt = Date.now();
       this.lastError = undefined;
       this.status = 'connected';
       this.emitState();
@@ -211,7 +220,17 @@ export class Bridge {
 
     socket.onmessage = (event: MessageEvent) => {
       const raw = typeof event.data === 'string' ? event.data : String(event.data ?? '');
-      this.latencyMs = undefined;
+      // A pong is proof that the link is alive in both directions. Recording
+      // it is what lets the heartbeat tell a healthy idle socket from a
+      // half-open one; without it the socket was closed every forty-five
+      // seconds, mid-task, and commands failed with "receiving end does not
+      // exist".
+      if (raw.includes('"pong"')) {
+        const now = Date.now();
+        this.latencyMs = this.pingSentAt !== undefined ? now - this.pingSentAt : 0;
+        this.pingSentAt = undefined;
+        this.lastPongAt = now;
+      }
       this.options.onEvent({ type: 'message', raw });
     };
 
@@ -250,25 +269,27 @@ export class Bridge {
   private startHeartbeat(): void {
     this.clearHeartbeat();
     const interval = this.options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
-    this.heartbeatTimer = setInterval(() => {
+
+    const tick = (): void => {
       const socket = this.socket;
       if (!socket || socket.readyState !== WebSocket.OPEN) return;
       const now = Date.now();
-      if (this.connectedAt !== undefined && now - this.connectedAt > STALE_SOCKET_MS && this.latencyMs === undefined) {
-        // The socket never answered a single ping — treat it as half open.
-        try {
-          socket.close(4000, 'heartbeat timeout');
-        } catch {
-          /* ignore */
-        }
-        return;
-      }
+
+      // Ping, but never hang up on a quiet link. A service worker is suspended
+      // between ticks, so a long gap proves nothing; and the daemon already
+      // drops a client it cannot reach. Closing from here only produced a
+      // reconnect storm every forty-five seconds, mid-task.
       try {
+        this.pingSentAt = now;
         socket.send(JSON.stringify({ v: '1.0.0', type: 'ping' }));
       } catch {
         /* ignore */
       }
-    }, interval);
+    };
+
+    // Prove the link immediately rather than waiting a full interval.
+    tick();
+    this.heartbeatTimer = setInterval(tick, interval);
   }
 
   private clearHeartbeat(): void {

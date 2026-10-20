@@ -146,7 +146,7 @@ export interface DaemonTransport {
   /** Subscribe to the event stream of a single session. */
   subscribe(sessionId: string, onEvent: (event: DaemonEvent) => void): () => void;
   /** Subscribe to every event the daemon emits (used by the websocket). */
-  subscribeGlobal(onEvent: (event: DaemonEvent) => void): () => void;
+  subscribeGlobal(onEvent: (event: DaemonEvent) => void, onReconnect?: () => void): () => void;
   dispose(): void;
 }
 
@@ -305,14 +305,39 @@ export class HttpTransport implements DaemonTransport {
     };
   }
 
-  /** Subscribes to the global `/ws` websocket stream. */
-  subscribeGlobal(onEvent: (event: DaemonEvent) => void): () => void {
+  /**
+   * Subscribes to the global `/ws` websocket stream.
+   *
+   * The daemon is a local process that gets restarted — during a rebuild, or
+   * by the user. A socket that closes must not leave the panel frozen on old
+   * data, so it reconnects with a short backoff and reports each (re)connect.
+   */
+  subscribeGlobal(
+    onEvent: (event: DaemonEvent) => void,
+    onReconnect?: () => void,
+  ): () => void {
     if (this.disposed) return () => undefined;
+
     let socket: WebSocket | null = null;
     let closed = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    try {
-      socket = new WebSocket(resolveWsUrl(this.base));
+    const connect = (): void => {
+      if (closed || this.disposed) return;
+      try {
+        socket = new WebSocket(resolveWsUrl(this.base));
+      } catch {
+        schedule();
+        return;
+      }
+
+      socket.onopen = () => {
+        const reconnected = attempt > 0;
+        attempt = 0;
+        if (reconnected) onReconnect?.();
+      };
+
       socket.onmessage = (ev) => {
         if (typeof ev.data !== 'string') return;
         try {
@@ -321,14 +346,29 @@ export class HttpTransport implements DaemonTransport {
           /* ignore malformed frames */
         }
       };
-    } catch {
-      socket = null;
-    }
+
+      socket.onclose = () => {
+        if (closed) return;
+        schedule();
+      };
+      socket.onerror = () => {
+        /* `onclose` follows, which is where the retry lives */
+      };
+    };
+
+    const schedule = (): void => {
+      if (closed || this.disposed) return;
+      const delay = Math.min(500 * 2 ** attempt, 10_000);
+      attempt += 1;
+      timer = setTimeout(connect, delay);
+    };
+
+    connect();
 
     return () => {
       closed = true;
+      if (timer) clearTimeout(timer);
       if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
-      void closed;
     };
   }
 

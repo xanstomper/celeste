@@ -24,6 +24,10 @@ export interface BridgeState {
   lastError?: string;
   /** Round trip time of the most recent heartbeat, in ms. */
   latencyMs?: number;
+  /** How long ago the daemon last answered a heartbeat, in ms. */
+  lastPongAgoMs?: number;
+  /** How long a ping has been waiting for an answer, in ms. */
+  pingOutstandingMs?: number;
 }
 
 export type BridgeEvent =
