@@ -200,5 +200,7 @@ export const API_ROUTES = {
   browserClick: '/api/browser/click',
   browserType: '/api/browser/type',
   browserScroll: '/api/browser/scroll',
+  /** Generic passthrough for bridge verbs that have no bespoke REST route. */
+  browserAction: '/api/browser/action',
   websocket: '/ws',
 } as const;

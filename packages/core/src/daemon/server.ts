@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
-import { API_ROUTES } from '@celeste/protocol';
+import { API_ROUTES, BROWSER_ACTIONS } from '@celeste/protocol';
 import type {
   ApprovalResponseRequest,
   Attachment,
@@ -260,7 +260,10 @@ export class Daemon {
           return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
         }
         try {
-          const tabs = await this.options.bridge.send('tabs', { action: 'list' }, { timeoutMs: 5000 });
+          const raw = await this.options.bridge.send<{ tabs?: unknown } | unknown[]>('tabs', { action: 'list' }, { timeoutMs: 5000 });
+          // The extension returns { tabs: [...] }; older daemons accidentally
+          // nested that object inside `tabs`. Flatten both shapes.
+          const tabs = Array.isArray(raw) ? raw : (Array.isArray((raw as { tabs?: unknown })?.tabs) ? (raw as { tabs: unknown[] }).tabs : []);
           return this.sendJson(res, 200, { ok: true, tabs });
         } catch (err) {
           return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
@@ -292,6 +295,30 @@ export class Daemon {
         try {
           const scrollRes = await this.options.bridge.send('scroll', body, { timeoutMs: 5000 });
           return this.sendJson(res, 200, { ok: true, result: scrollRes });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      // Generic bridge passthrough. The extension implements many verbs
+      // (press/fill/select/hover/evaluate/waitFor/...) that the UI never
+      // needed bespoke routes for; local agents such as Mochi do. Keep the
+      // allow-list to the protocol's browser verbs so this is not an
+      // arbitrary bridge RPC.
+      if (route === API_ROUTES.browserAction && method === 'POST') {
+        if (!this.options.bridge.isConnected) {
+          return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
+        }
+        const body = (await readJson<{ action?: string; params?: Record<string, unknown>; timeoutMs?: number; tabId?: number }>(req)) ?? {};
+        const action = String(body.action ?? '').trim();
+        if (!BROWSER_ACTIONS.includes(action as never)) {
+          return this.sendError(res, 400, 'INVALID_ARGS', `unsupported browser action: ${action || '(missing)'}`);
+        }
+        const timeoutMs = Math.min(60_000, Math.max(1_000, Number(body.timeoutMs) || 15_000));
+        const tabId = Number.isFinite(Number(body.tabId)) ? Number(body.tabId) : undefined;
+        try {
+          const result = await this.options.bridge.send(action, body.params ?? {}, { timeoutMs, ...(tabId !== undefined ? { tabId } : {}) });
+          return this.sendJson(res, 200, { ok: true, result });
         } catch (err) {
           return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
         }
