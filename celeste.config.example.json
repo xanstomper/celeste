@@ -101,6 +101,101 @@
       "model": "openai-fast",
       "supportsTools": true,
       "supportsVision": false
+    },
+    {
+      "id": "local-glm",
+      "kind": "openai-compatible",
+      "label": "Local router \u00b7 GLM-5.3 Flash",
+      "baseUrl": "http://localhost:8705/v1",
+      "model": "glm-5.3-flash",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "local-minimax",
+      "kind": "openai-compatible",
+      "label": "Local router \u00b7 MiniMax M3",
+      "baseUrl": "http://localhost:8705/v1",
+      "model": "minimax-m3",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "local-qwen",
+      "kind": "openai-compatible",
+      "label": "Local router \u00b7 Qwen3.6 35B",
+      "baseUrl": "http://localhost:8705/v1",
+      "model": "qwen3.6-35b",
+      "supportsTools": true,
+      "supportsVision": true
+    },
+    {
+      "id": "local-deepseek",
+      "kind": "openai-compatible",
+      "label": "Local router \u00b7 DeepSeek V4 Flash",
+      "baseUrl": "http://localhost:8705/v1",
+      "model": "deepseek-v4-flash",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "local-diffusion",
+      "kind": "openai-compatible",
+      "label": "Local router \u00b7 DiffusionGemma",
+      "baseUrl": "http://localhost:8705/v1",
+      "model": "diffusiongemma",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "vyceai-deepseek",
+      "kind": "openai-compatible",
+      "label": "VyceAI \u00b7 DeepSeek V4.1",
+      "baseUrl": "https://vyceai.com/v1",
+      "model": "deepseek-v4.1",
+      "apiKeyEnv": "VYCEAI_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "vyceai-gpt",
+      "kind": "openai-compatible",
+      "label": "VyceAI \u00b7 GPT-6 Luna",
+      "baseUrl": "https://vyceai.com/v1",
+      "model": "gpt-6-luna",
+      "apiKeyEnv": "VYCEAI_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "vyceai-claude",
+      "kind": "openai-compatible",
+      "label": "VyceAI \u00b7 Claude Sonnet 4.6",
+      "baseUrl": "https://vyceai.com/v1",
+      "model": "claude-sonnet-4-6",
+      "apiKeyEnv": "VYCEAI_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "vyceai-agnes",
+      "kind": "openai-compatible",
+      "label": "VyceAI \u00b7 Agnes 3.0 Flash",
+      "baseUrl": "https://vyceai.com/v1",
+      "model": "agnes-3.0-flash",
+      "apiKeyEnv": "VYCEAI_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
+    },
+    {
+      "id": "vyceai-glm",
+      "kind": "openai-compatible",
+      "label": "VyceAI \u00b7 GLM-5.3 Flash",
+      "baseUrl": "https://vyceai.com/v1",
+      "model": "glm-5.3-flash",
+      "apiKeyEnv": "VYCEAI_API_KEY",
+      "supportsTools": true,
+      "supportsVision": false
     }
   ]
 }
