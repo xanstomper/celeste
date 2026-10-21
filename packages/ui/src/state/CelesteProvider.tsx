@@ -44,6 +44,13 @@ import type {
 } from './useCeleste';
 import { persistSettings } from './useCeleste';
 
+/** A unique id for one browser action, so the panel can key and dedupe them. */
+let browserActionCounter = 0;
+function nextBrowserActionId(): string {
+  browserActionCounter += 1;
+  return `browser_action_${Date.now().toString(36)}_${browserActionCounter.toString(36)}`;
+}
+
 export function CelesteProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(celesteReducer, undefined, initialCelesteState);
   const [, setTransportVersion] = useState(0);
@@ -303,9 +310,121 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       const current = transportRef.current;
       if (!current) return;
       try {
-        await current.navigateBrowser?.(url);
+        const res = await current.navigateBrowser?.(url);
+        const shot = await current.getBrowserScreenshot?.();
+        if (shot?.data) {
+          dispatch({
+            type: 'browser',
+            action: {
+              id: nextBrowserActionId(),
+              action: 'navigate',
+              url,
+              title: ((res?.result as Record<string, unknown>)?.title as string) || url,
+              screenshot: shot.data,
+              at: Date.now(),
+            },
+          });
+        }
       } catch (err) {
         notify('error', `Navigation failed: ${toApiError(err).message}`);
+      }
+    },
+    [notify],
+  );
+
+  const clickBrowser = useCallback(
+    async (point: { x: number; y: number }, ref?: string) => {
+      const current = transportRef.current;
+      if (!current) return;
+      try {
+        await current.clickBrowser?.(point, ref);
+        setTimeout(async () => {
+          try {
+            const shot = await current.getBrowserScreenshot?.();
+            if (shot?.data) {
+              dispatch({
+                type: 'browser',
+                action: {
+                  id: nextBrowserActionId(),
+                  action: 'click',
+                  point,
+                  ref,
+                  screenshot: shot.data,
+                  at: Date.now(),
+                },
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 350);
+      } catch (err) {
+        notify('error', `Click failed: ${toApiError(err).message}`);
+      }
+    },
+    [notify],
+  );
+
+  const typeBrowser = useCallback(
+    async (text: string, ref?: string) => {
+      const current = transportRef.current;
+      if (!current) return;
+      try {
+        await current.typeBrowser?.(text, ref);
+        setTimeout(async () => {
+          try {
+            const shot = await current.getBrowserScreenshot?.();
+            if (shot?.data) {
+              dispatch({
+                type: 'browser',
+                action: {
+                  id: nextBrowserActionId(),
+                  action: 'type',
+                  text,
+                  ref,
+                  screenshot: shot.data,
+                  at: Date.now(),
+                },
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 300);
+      } catch (err) {
+        notify('error', `Typing failed: ${toApiError(err).message}`);
+      }
+    },
+    [notify],
+  );
+
+  const scrollBrowser = useCallback(
+    async (deltaY = 400) => {
+      const current = transportRef.current;
+      if (!current) return;
+      try {
+        await current.scrollBrowser?.(deltaY);
+        setTimeout(async () => {
+          try {
+            const shot = await current.getBrowserScreenshot?.();
+            if (shot?.data) {
+              dispatch({
+                type: 'browser',
+                action: {
+                  id: nextBrowserActionId(),
+                  action: 'scroll',
+                  title: `Scrolled ${deltaY > 0 ? 'down' : 'up'}`,
+                  screenshot: shot.data,
+                  at: Date.now(),
+                },
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 250);
+      } catch (err) {
+        notify('error', `Scroll failed: ${toApiError(err).message}`);
       }
     },
     [notify],
@@ -316,7 +435,20 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
     if (!current) return;
     try {
       const res = await current.getBrowserScreenshot?.();
-      return res?.data ?? undefined;
+      if (res?.data) {
+        dispatch({
+          type: 'browser',
+          action: {
+            id: nextBrowserActionId(),
+            action: 'snapshot',
+            title: 'Manual screenshot capture',
+            screenshot: res.data,
+            at: Date.now(),
+          },
+        });
+        return res.data;
+      }
+      return undefined;
     } catch (err) {
       notify('error', `Screenshot failed: ${toApiError(err).message}`);
     }
@@ -374,6 +506,9 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       cancelTask,
       switchProvider,
       navigateBrowser,
+      clickBrowser,
+      typeBrowser,
+      scrollBrowser,
       captureScreenshot,
       setSettings,
       setTheme,
@@ -391,6 +526,9 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       cancelTask,
       switchProvider,
       navigateBrowser,
+      clickBrowser,
+      typeBrowser,
+      scrollBrowser,
       captureScreenshot,
       setSettings,
       setTheme,

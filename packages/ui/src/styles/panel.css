@@ -6,6 +6,11 @@
  * The client is embedded in the browser as a side panel, roughly 400px wide.
  * In that context the session list and the status bar are noise: the panel is
  * one thread, one composer, one status line.
+ *
+ * Panel mode is switched on by `data-celeste-panel="true"` on `<html>`. The
+ * extension sets that attribute in `sidepanel.html`; the client also sets it
+ * when the viewport is narrower than 640px, so the same stylesheet covers a
+ * docked panel and a phone.
  */
 
 html[data-celeste-panel='true'] {
@@ -18,21 +23,23 @@ html[data-celeste-panel='true'] .celeste-panel-body {
   overflow: hidden;
 }
 
-/* The panel is a single column: thread on top, composer pinned below. */
+/* The panel is a single column: header, thread, composer. */
 html[data-celeste-panel='true'] .app {
   height: 100vh;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: var(--topbar-h) 1fr;
 }
 
 html[data-celeste-panel='true'] .sidebar,
-html[data-celeste-panel='true'] .titlebar__sidebar-toggle {
+html[data-celeste-panel='true'] .titlebar__sidebar-toggle,
+html[data-celeste-panel='true'] .session-head,
+html[data-celeste-panel='true'] .statusbar {
   display: none;
 }
 
 /* Tighten the chrome: the panel is narrow, so every pixel counts. */
 html[data-celeste-panel='true'] .titlebar {
-  padding: 0 12px;
-  gap: 8px;
+  padding: 0 8px 0 10px;
+  gap: 6px;
 }
 
 html[data-celeste-panel='true'] .brand__tag {
@@ -44,31 +51,76 @@ html[data-celeste-panel='true'] .main {
 }
 
 html[data-celeste-panel='true'] .main__timeline {
-  padding: 12px 14px 8px;
+  padding: 12px 12px 4px;
 }
 
 html[data-celeste-panel='true'] .main__composer {
-  padding: 8px 12px 12px;
+  padding: 6px 12px 10px;
 }
 
-html[data-celeste-panel='true'] .bubble--user .bubble__body {
-  max-width: 92%;
+html[data-celeste-panel='true'] .timeline {
+  gap: 14px;
 }
 
-html[data-celeste-panel='true'] .statusbar {
-  font-size: 10.5px;
-  gap: 8px;
-  padding: 0 12px;
+html[data-celeste-panel='true'] .query {
+  max-width: 88%;
 }
 
-html[data-celeste-panel='true'] .statusbar__version,
-html[data-celeste-panel='true'] .statusbar__spacer {
+html[data-celeste-panel='true'] .bubble--assistant .bubble__text,
+html[data-celeste-panel='true'] .bubble--streaming .bubble__text {
+  font-size: 14px;
+  line-height: 1.58;
+}
+
+html[data-celeste-panel='true'] .provider-picker__trigger--pill {
+  max-width: 128px;
+}
+
+html[data-celeste-panel='true'] .provider-picker__model--pill {
+  max-width: 78px;
+}
+
+/* The keyboard hints do not fit, and the shortcuts still work. */
+html[data-celeste-panel='true'] .palette__footer {
   display: none;
 }
 
-/* The standalone app keeps its full chrome. */
-@media (min-width: 640px) {
-  html[data-celeste-panel='true'] .sidebar {
-    display: flex;
+/* The split workspace cannot sit side by side in a panel, so it stacks. */
+html[data-celeste-panel='true'] .workspace-split {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+html[data-celeste-panel='true'] .workspace-split__right {
+  display: none;
+}
+
+/* Nothing inside the thread may be wider than the panel itself. */
+html[data-celeste-panel='true'] .timeline,
+html[data-celeste-panel='true'] .bubble,
+html[data-celeste-panel='true'] .query,
+html[data-celeste-panel='true'] .tool-card,
+html[data-celeste-panel='true'] .sources,
+html[data-celeste-panel='true'] .composer {
+  max-width: 100%;
+  min-width: 0;
+}
+
+html[data-celeste-panel='true'] .source__domain {
+  max-width: 108px;
+}
+
+/* Below 380px the wordmark text is the first thing to go. */
+@media (max-width: 380px) {
+  html[data-celeste-panel='true'] .wordmark__text {
+    display: none;
+  }
+
+  html[data-celeste-panel='true'] .main__timeline {
+    padding: 10px 10px 4px;
+  }
+
+  html[data-celeste-panel='true'] .main__composer {
+    padding: 6px 10px 8px;
   }
 }

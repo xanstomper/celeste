@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatDuration, humanizeToolName } from '../lib/format';
+import { formatDuration, toolLabel } from '../lib/format';
 import type { ToolTimelineItem } from '../state/timeline';
 import { Icon } from './Icon';
 import { JsonView } from './JsonView';
@@ -66,7 +66,7 @@ export function ToolCard({ item, runtimeHint, onOpenBrowser }: ToolCardProps) {
           </span>
         ) : null}
 
-        <span className="tool-card__name">{humanizeToolName(item.toolName)}</span>
+        <span className="tool-card__name">{toolLabel(item.toolName, item.arguments ?? {})}</span>
         {runtimeHint ? <span className="chip chip--ghost">{runtimeHint}</span> : null}
 
         {/* Specialized inline visual summary */}

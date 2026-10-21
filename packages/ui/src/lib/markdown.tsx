@@ -226,10 +226,17 @@ export interface MarkdownProps {
   className?: string;
   /** Resolves `[n]` markers to real pages. */
   citations?: Map<number, CitationRef>;
+  /**
+   * Rendered inside the prose, before the first block.
+   *
+   * Used for the small teal glyph that sits at the left of the first line of
+   * an answer - a float, so only the first line is indented.
+   */
+  lead?: ReactNode;
 }
 
 /** Renders a Markdown document as React elements. */
-export function Markdown({ content, className, citations }: MarkdownProps): ReactNode {
+export function Markdown({ content, className, citations, lead }: MarkdownProps): ReactNode {
   const blocks = parseBlocks(content ?? '');
 
   if (blocks.length === 0) {
@@ -238,6 +245,7 @@ export function Markdown({ content, className, citations }: MarkdownProps): Reac
 
   return (
     <div className={className ? `md ${className}` : 'md'}>
+      {lead}
       {blocks.map((block, index) => {
         const key = `b${index}`;
         switch (block.kind) {

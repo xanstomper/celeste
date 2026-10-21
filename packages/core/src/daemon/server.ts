@@ -1,5 +1,8 @@
+import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { API_ROUTES } from '@celeste/protocol';
 import type {
@@ -30,6 +33,40 @@ export interface DaemonOptions {
   bridge: BrowserBridge;
   sessionGuard: SessionGuard;
   version?: string;
+}
+
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json; charset=utf-8',
+};
+
+function findUiDist(): string | null {
+  try {
+    let dir = path.dirname(fileURLToPath(import.meta.url));
+    for (let depth = 0; depth < 8; depth++) {
+      const candidate = path.join(dir, 'packages', 'ui', 'dist');
+      if (existsSync(path.join(candidate, 'index.html'))) return candidate;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 /**
@@ -250,6 +287,16 @@ export class Daemon {
         }
       }
 
+      if (route === API_ROUTES.browserScroll && method === 'POST') {
+        const body = (await readJson<{ deltaY?: number }>(req)) ?? {};
+        try {
+          const scrollRes = await this.options.bridge.send('scroll', body, { timeoutMs: 5000 });
+          return this.sendJson(res, 200, { ok: true, result: scrollRes });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
       // /api/sessions/:id/...
       const sessionMatch = /^\/api\/sessions\/([^/]+)(?:\/(events|approve|cancel|message))?$/.exec(route);
       if (sessionMatch) {
@@ -351,9 +398,56 @@ export class Daemon {
         }
       }
 
+      // Serve static web UI files when requesting any non-API route
+      if ((method === 'GET' || method === 'HEAD') && !route.startsWith('/api') && route !== API_ROUTES.websocket) {
+        const handled = await this.serveStatic(req, res, route);
+        if (handled) return;
+      }
+
       return this.sendError(res, 404, 'NOT_FOUND', `No route for ${method} ${route}`);
     } catch (err) {
       return this.sendError(res, 400, 'INVALID_ARGS', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private async serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
+    const uiDist = findUiDist();
+    if (!uiDist) return false;
+
+    try {
+      const decoded = decodeURIComponent(pathname);
+      const cleanPath = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
+      let target = path.join(uiDist, cleanPath);
+
+      if (cleanPath === '/' || cleanPath === '' || cleanPath === '.') {
+        target = path.join(uiDist, 'index.html');
+      }
+
+      if (!existsSync(target) || !statSync(target).isFile()) {
+        target = path.join(uiDist, 'index.html');
+        if (!existsSync(target)) return false;
+      }
+
+      const ext = path.extname(target).toLowerCase();
+      const contentType = MIME_TYPES[ext] ?? 'application/octet-stream';
+
+      res.statusCode = 200;
+      res.setHeader('content-type', contentType);
+      if (ext === '.html') {
+        res.setHeader('cache-control', 'no-cache');
+      } else {
+        res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+      }
+
+      if (req.method === 'HEAD') {
+        res.end();
+        return true;
+      }
+
+      createReadStream(target).pipe(res);
+      return true;
+    } catch {
+      return false;
     }
   }
 

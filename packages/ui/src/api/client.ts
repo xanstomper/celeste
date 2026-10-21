@@ -25,11 +25,16 @@ import type {
 
 export const DEFAULT_API_BASE = 'http://127.0.0.1:9126';
 
-/** Reads `VITE_CELESTE_API`; falls back to the well known local daemon. */
+/** Reads `VITE_CELESTE_API`; falls back to origin or well known local daemon. */
 export function readEnvApiBase(): string {
   const raw = import.meta.env.VITE_CELESTE_API;
   const value = typeof raw === 'string' ? raw.trim() : '';
-  if (!value) return DEFAULT_API_BASE;
+  if (!value) {
+    if (typeof window !== 'undefined' && window.location?.origin && window.location.origin.startsWith('http')) {
+      return window.location.origin;
+    }
+    return DEFAULT_API_BASE;
+  }
   return value.replace(/\/+$/, '');
 }
 
@@ -148,6 +153,9 @@ export interface DaemonTransport {
   getBrowserScreenshot?(): Promise<{ data: string | null; mimeType: string }>;
   navigateBrowser?(url: string): Promise<{ ok: boolean; result?: unknown }>;
   getBrowserTabs?(): Promise<{ ok: boolean; tabs?: unknown }>;
+  clickBrowser?(point: { x: number; y: number }, ref?: string): Promise<{ ok: boolean; result?: unknown }>;
+  typeBrowser?(text: string, ref?: string): Promise<{ ok: boolean; result?: unknown }>;
+  scrollBrowser?(deltaY?: number): Promise<{ ok: boolean; result?: unknown }>;
   /** Subscribe to the event stream of a single session. */
   subscribe(sessionId: string, onEvent: (event: DaemonEvent) => void): () => void;
   /** Subscribe to every event the daemon emits (used by the websocket). */
@@ -242,12 +250,33 @@ export class HttpTransport implements DaemonTransport {
   async navigateBrowser(url: string): Promise<{ ok: boolean; result?: unknown }> {
     return request(this.base, API_ROUTES.browserNavigate, {
       method: 'POST',
-      body: JSON.stringify({ url }),
+      body: { url },
     });
   }
 
   async getBrowserTabs(): Promise<{ ok: boolean; tabs?: unknown }> {
     return request(this.base, API_ROUTES.browserTabs);
+  }
+
+  async clickBrowser(point: { x: number; y: number }, ref?: string): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserClick, {
+      method: 'POST',
+      body: { x: point.x, y: point.y, ref },
+    });
+  }
+
+  async typeBrowser(text: string, ref?: string): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserType, {
+      method: 'POST',
+      body: { text, ref },
+    });
+  }
+
+  async scrollBrowser(deltaY = 400): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserScroll, {
+      method: 'POST',
+      body: { deltaY },
+    });
   }
 
   /**

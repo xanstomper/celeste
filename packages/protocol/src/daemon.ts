@@ -199,5 +199,6 @@ export const API_ROUTES = {
   browserTabs: '/api/browser/tabs',
   browserClick: '/api/browser/click',
   browserType: '/api/browser/type',
+  browserScroll: '/api/browser/scroll',
   websocket: '/ws',
 } as const;

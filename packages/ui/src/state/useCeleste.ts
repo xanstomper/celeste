@@ -12,6 +12,7 @@
 import { createContext, useContext } from 'react';
 import type {
   Artifact,
+  BrowserActionInfo,
   DaemonEvent,
   HealthResponse,
   Attachment,
@@ -68,6 +69,8 @@ export interface CelesteState {
   extensionConnected: boolean;
   extensionDetail: string | undefined;
   settings: Settings;
+  latestBrowserAction: BrowserActionInfo | null;
+  browserHistory: BrowserActionInfo[];
   approvalDecisions: Record<string, 'approve' | 'deny'>;
   dismissedHumans: Record<string, true>;
   toasts: Toast[];
@@ -89,6 +92,9 @@ export interface CelesteActions {
   cancelTask: () => Promise<void>;
   switchProvider: (id: string) => Promise<void>;
   navigateBrowser: (url: string) => Promise<void>;
+  clickBrowser: (point: { x: number; y: number }, ref?: string) => Promise<void>;
+  typeBrowser: (text: string, ref?: string) => Promise<void>;
+  scrollBrowser: (deltaY?: number) => Promise<void>;
   captureScreenshot: () => Promise<string | void>;
   setSettings: (patch: Partial<Settings>) => void;
   setTheme: (theme: Theme) => void;
@@ -114,7 +120,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoApprove: true,
   extensionPort: 9126,
   apiBase: '',
-  theme: 'dark',
+  theme: 'light',
 };
 
 function loadSettings(): Settings {
@@ -135,7 +141,7 @@ function loadSettings(): Settings {
           ? parsed.extensionPort
           : DEFAULT_SETTINGS.extensionPort,
       apiBase: typeof parsed.apiBase === 'string' ? parsed.apiBase : DEFAULT_SETTINGS.apiBase,
-      theme: parsed.theme === 'light' ? 'light' : 'dark',
+      theme: parsed.theme === 'dark' ? 'dark' : 'light',
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -165,6 +171,7 @@ export type CelesteAction =
   | { type: 'select'; id: string | null }
   | { type: 'event'; sessionId: string; event: DaemonEvent }
   | { type: 'clearEvents' }
+  | { type: 'browser'; action: BrowserActionInfo }
   | { type: 'artifacts'; artifacts: Artifact[] }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'approvalDecision'; requestId: string; decision: 'approve' | 'deny' }
@@ -306,8 +313,29 @@ export function celesteReducer(
         if (currentFinished) activeSessionId = sessionId;
       }
 
-      return { ...state, eventsBySession, sessions, activeSessionId };
+      let latestBrowserAction = state.latestBrowserAction;
+      let browserHistory = state.browserHistory;
+      if (event.type === 'task.browser.action') {
+        latestBrowserAction = event.action;
+        browserHistory = [...browserHistory.slice(-29), event.action];
+      }
+
+      return {
+        ...state,
+        eventsBySession,
+        sessions,
+        activeSessionId,
+        latestBrowserAction,
+        browserHistory,
+      };
     }
+
+    case 'browser':
+      return {
+        ...state,
+        latestBrowserAction: action.action,
+        browserHistory: [...state.browserHistory.slice(-29), action.action],
+      };
 
     case 'artifacts':
       return { ...state, artifacts: action.artifacts };
@@ -355,6 +383,8 @@ export function initialCelesteState(): CelesteState {
     extensionConnected: false,
     extensionDetail: undefined,
     settings,
+    latestBrowserAction: null,
+    browserHistory: [],
     approvalDecisions: {},
     dismissedHumans: {},
     toasts: [],

@@ -7,31 +7,17 @@ import { CommandPalette } from './components/CommandPalette';
 import type { PaletteAction } from './components/CommandPalette';
 import { Composer } from './components/Composer';
 import { Icon } from './components/Icon';
+import { ProviderPicker } from './components/ProviderPicker';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
+import { ThreadMenu } from './components/ThreadMenu';
 import { Timeline } from './components/Timeline';
+import { Wordmark } from './components/Wordmark';
+import { usePanelMode, useMediaQuery } from './lib/panel';
 import { CelesteProvider } from './state/CelesteProvider';
 import { useCeleste } from './state/useCeleste';
 import { statusLabel } from './state/timeline';
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return false;
-    return window.matchMedia(query).matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const list = window.matchMedia(query);
-    const handler = (event: MediaQueryListEvent) => setMatches(event.matches);
-    setMatches(list.matches);
-    list.addEventListener('change', handler);
-    return () => list.removeEventListener('change', handler);
-  }, [query]);
-
-  return matches;
-}
 
 function Workspace() {
   const { state, actions, timeline, activeTask, effectiveApiBase } = useCeleste();
@@ -46,13 +32,19 @@ function Workspace() {
   const [canvasOpen, setCanvasOpen] = useState(false);
   const canvasSeenRef = useRef<string | null>(null);
   const [focusComposerToken, setFocusComposerToken] = useState(0);
+  const [fill, setFill] = useState<{ text: string; token: number } | null>(null);
+  const fillTokenRef = useRef(0);
   const narrow = useMediaQuery('(max-width: 900px)');
   const [sidebarOpen, setSidebarOpen] = useState(!narrow);
   const composerRef = useRef<HTMLDivElement | null>(null);
 
+  /* Panel mode: docked next to a page, or a viewport too narrow for the
+     full chrome. The session list and the status bar are noise there. */
+  const panel = usePanelMode();
+
   useEffect(() => {
-    setSidebarOpen(!narrow);
-  }, [narrow]);
+    setSidebarOpen(!narrow && !panel);
+  }, [narrow, panel]);
 
   // A canvas that appears while the agent is working opens itself — that is
   // the moment it is meant to be seen. Re-opening a thread later leaves the
@@ -66,6 +58,21 @@ function Workspace() {
     }
     if (!canvasId) canvasSeenRef.current = null;
   }, [canvasId, activeTask?.status]);
+
+  // Auto-open live browser in split view on desktop when the agent starts browser actions!
+  const hasBrowserAction = Boolean(activeTask?.activeBrowser);
+  useEffect(() => {
+    if (hasBrowserAction && !narrow && !splitView) {
+      setSidePane('browser');
+      setSplitView(true);
+    }
+  }, [hasBrowserAction, narrow, splitView]);
+
+  const currentBrowserAction = activeTask?.activeBrowser ?? state.latestBrowserAction ?? null;
+  const currentBrowserHistory =
+    activeTask?.browserHistory && activeTask.browserHistory.length > 0
+      ? activeTask.browserHistory
+      : state.browserHistory;
 
   const handleOpenBrowser = useCallback(() => {
     setSidePane('browser');
@@ -150,6 +157,13 @@ function Workspace() {
     [actions, composerMode, focus, research, state.activeSessionId],
   );
 
+  /** Drops a suggestion into the composer so the reader can edit it first. */
+  const fillComposer = useCallback((text: string) => {
+    fillTokenRef.current += 1;
+    setFill({ text, token: fillTokenRef.current });
+    setFocusComposerToken((token) => token + 1);
+  }, []);
+
   const paletteActions = useMemo<PaletteAction[]>(
     () => [
       { id: 'new-session', label: 'New task', hint: 'Cmd/Ctrl+Enter', icon: 'plus', keywords: 'create start' },
@@ -193,25 +207,30 @@ function Workspace() {
   );
 
   return (
-    <div className={`app${narrow ? ' app--narrow' : ''}`}>
+    <div className={`app${narrow ? ' app--narrow' : ''}${panel ? ' app--panel celeste-panel' : ''}`}>
       <header className="titlebar">
-        <button
-          type="button"
-          className="icon-button titlebar__sidebar-toggle"
-          onClick={() => setSidebarOpen((open) => !open)}
-          aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          aria-expanded={sidebarOpen}
-        >
-          <Icon name="panel" size={16} />
-        </button>
+        {panel ? null : (
+          <button
+            type="button"
+            className="icon-button titlebar__sidebar-toggle"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            aria-expanded={sidebarOpen}
+          >
+            <Icon name="panel" size={16} />
+          </button>
+        )}
 
-        <div className="brand">
-          <span className="brand__mark" aria-hidden="true">
-            <Icon name="sparkle" size={15} />
-          </span>
-          <span className="brand__name">Celeste</span>
-          <span className="brand__tag">local-first browser agent</span>
-        </div>
+        <Wordmark size={22} />
+
+        {panel ? (
+          <ThreadMenu
+            sessions={state.sessions}
+            activeId={state.activeSessionId}
+            onSelect={handleSelectSession}
+            onNew={startNewTask}
+          />
+        ) : null}
 
         <div className="titlebar__spacer" />
 
@@ -221,6 +240,24 @@ function Workspace() {
             Demo
           </span>
         ) : null}
+
+        <ProviderPicker
+          providers={state.providers}
+          activeId={activeProvider?.id ?? null}
+          onSwitch={(id) => void actions.switchProvider(id)}
+          variant="pill"
+          label="Active model"
+        />
+
+        <button
+          type="button"
+          className="icon-button"
+          onClick={startNewTask}
+          aria-label="New thread"
+          title="New thread (Cmd/Ctrl+Enter)"
+        >
+          <Icon name="plus" size={16} />
+        </button>
 
         <button
           type="button"
@@ -232,29 +269,33 @@ function Workspace() {
           <Icon name="search" size={16} />
         </button>
 
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => actions.setTheme(state.settings.theme === 'dark' ? 'light' : 'dark')}
-          aria-label="Toggle colour theme"
-          title="Toggle theme"
-        >
-          <Icon name={state.settings.theme === 'dark' ? 'sun' : 'moon'} size={16} />
-        </button>
+        {panel ? null : (
+          <>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => actions.setTheme(state.settings.theme === 'dark' ? 'light' : 'dark')}
+              aria-label="Toggle colour theme"
+              title="Toggle theme"
+            >
+              <Icon name={state.settings.theme === 'dark' ? 'sun' : 'moon'} size={16} />
+            </button>
 
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => setSettingsOpen(true)}
-          aria-label="Open settings"
-          title="Settings"
-        >
-          <Icon name="settings" size={16} />
-        </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Open settings"
+              title="Settings"
+            >
+              <Icon name="settings" size={16} />
+            </button>
+          </>
+        )}
       </header>
 
       <div className="app__body">
-        {sidebarOpen ? (
+        {sidebarOpen && !panel ? (
           <Sidebar
             sessions={state.sessions}
             activeId={state.activeSessionId}
@@ -265,6 +306,7 @@ function Workspace() {
         ) : null}
 
         <main className="main">
+          {panel ? null : (
           <header className="session-head">
             <div className="session-head__title">
               <h1 className="session-head__name">
@@ -359,6 +401,7 @@ function Workspace() {
               </button>
             </div>
           </header>
+          )}
 
           {splitView ? (
             <div className="workspace-split">
@@ -375,6 +418,7 @@ function Workspace() {
                     busy={state.busy}
                     taskSources={activeTask?.sources}
                     onAsk={(question) => void actions.sendMessage(question)}
+                    onFill={fillComposer}
                     onOpenCanvas={handleOpenCanvas}
                     onOpenBrowser={handleOpenBrowser}
                   />
@@ -398,6 +442,7 @@ function Workspace() {
                     onCancel={() => void actions.cancelTask()}
                     focusToken={focusComposerToken}
                     mode={composerMode}
+                    fill={fill}
                   />
                 </div>
               </div>
@@ -405,12 +450,16 @@ function Workspace() {
               <div className="workspace-split__right">
                 {sidePane === 'browser' ? (
                   <BrowserWrapper
-                    activeAction={activeTask?.activeBrowser ?? null}
-                    browserHistory={activeTask?.browserHistory ?? []}
+                    activeAction={currentBrowserAction}
+                    browserHistory={currentBrowserHistory}
                     extensionConnected={state.extensionConnected}
                     onClose={() => setSplitView(false)}
                     onNavigate={(url) => void actions.navigateBrowser(url)}
+                    onClick={(point, ref) => void actions.clickBrowser(point, ref)}
+                    onType={(text, ref) => void actions.typeBrowser(text, ref)}
+                    onScroll={(deltaY) => void actions.scrollBrowser(deltaY)}
                     onCaptureScreenshot={() => actions.captureScreenshot()}
+                    onAsk={(prompt) => void actions.sendMessage(prompt)}
                   />
                 ) : (
                   <CanvasPane
@@ -425,12 +474,16 @@ function Workspace() {
           ) : activeTab === 'browser' ? (
             <div className="main__full-pane">
               <BrowserWrapper
-                activeAction={activeTask?.activeBrowser ?? null}
-                browserHistory={activeTask?.browserHistory ?? []}
+                activeAction={currentBrowserAction}
+                browserHistory={currentBrowserHistory}
                 extensionConnected={state.extensionConnected}
                 onClose={() => setActiveTab('chat')}
                 onNavigate={(url) => void actions.navigateBrowser(url)}
+                onClick={(point, ref) => void actions.clickBrowser(point, ref)}
+                onType={(text, ref) => void actions.typeBrowser(text, ref)}
+                onScroll={(deltaY) => void actions.scrollBrowser(deltaY)}
                 onCaptureScreenshot={() => actions.captureScreenshot()}
+                onAsk={(prompt) => void actions.sendMessage(prompt)}
               />
             </div>
           ) : activeTab === 'canvas' ? (
@@ -459,6 +512,7 @@ function Workspace() {
                   busy={state.busy}
                   taskSources={activeTask?.sources}
                   onAsk={(question) => void actions.sendMessage(question)}
+                  onFill={fillComposer}
                   onOpenCanvas={handleOpenCanvas}
                   onOpenBrowser={handleOpenBrowser}
                 />
@@ -482,6 +536,7 @@ function Workspace() {
                   onCancel={() => void actions.cancelTask()}
                   focusToken={focusComposerToken}
                   mode={composerMode}
+                  fill={fill}
                 />
               </div>
             </>
@@ -489,6 +544,7 @@ function Workspace() {
         </main>
       </div>
 
+      {panel ? null : (
       <StatusBar
         connection={state.connection}
         connectionError={state.connectionError}
@@ -501,6 +557,7 @@ function Workspace() {
         onReconnect={() => void actions.reconnect()}
         version={state.health?.version}
       />
+      )}
 
       <CommandPalette
         open={paletteOpen}

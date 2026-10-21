@@ -27,6 +27,14 @@ export interface ComposerProps {
   mode?: 'reply' | 'new';
   /** Bumping this token asks the composer to grab focus. */
   focusToken?: number;
+  /**
+   * Fills the composer with a suggestion.
+   *
+   * The empty state owns the starters, so it hands them over instead of
+   * owning the field's value - the composer stays uncontrolled and does not
+   * re-render the thread on every keystroke.
+   */
+  fill?: { text: string; token: number } | null;
 }
 
 const MAX_HEIGHT = 220;
@@ -57,6 +65,7 @@ export function Composer({
   running = false,
   mode = 'reply',
   focusToken = 0,
+  fill = null,
 }: ComposerProps) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -71,11 +80,12 @@ export function Composer({
     const node = textareaRef.current;
     if (!node) return;
     if (!value.trim()) {
-      node.style.height = '26px';
+      node.style.height = '38px';
       return;
     }
     node.style.height = 'auto';
-    node.style.height = `${Math.min(node.scrollHeight, MAX_HEIGHT)}px`;
+    const next = Math.max(38, Math.min(node.scrollHeight, MAX_HEIGHT));
+    node.style.height = `${next}px`;
   }, [value]);
 
   useEffect(() => {
@@ -86,6 +96,13 @@ export function Composer({
     if (focusToken === 0) return;
     textareaRef.current?.focus();
   }, [focusToken]);
+
+  /* A suggestion handed over by the empty state lands in the field. */
+  useEffect(() => {
+    if (!fill || !fill.text) return;
+    setValue(fill.text);
+    textareaRef.current?.focus();
+  }, [fill]);
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const images = [...files].filter((file) => file.type.startsWith('image/'));
@@ -197,11 +214,7 @@ export function Composer({
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          placeholder={
-            startingNew
-              ? 'Ask anything, or tell Celeste what to do in your browser…'
-              : 'Reply, or add the next instruction…  (Enter to send, Shift+Enter for a new line)'
-          }
+          placeholder="Ask anything…"
           aria-label={startingNew ? 'Describe a task' : 'Send a message'}
         />
 
@@ -288,7 +301,7 @@ export function Composer({
       ) : null}
 
       <p className="composer__hint">
-        Celeste can make mistakes. Verify critical actions in the live browser.
+        Celeste can make mistakes. Double-check important results.
       </p>
     </div>
   );

@@ -13,7 +13,9 @@ export interface SourcesRowProps {
  *
  * This is the part that makes an answer feel researched rather than
  * asserted: small numbered chips, one per page, each opening the real source.
- * Expanding one shows its title and snippet.
+ * The badge is coloured from a hash of the domain, so the same site keeps the
+ * same colour for the whole thread, and expanding one shows its title, its
+ * address and the snippet that was used.
  */
 export function SourcesRow({ refs }: SourcesRowProps) {
   const [open, setOpen] = useState<number | null>(null);
@@ -46,10 +48,9 @@ export function SourcesRow({ refs }: SourcesRowProps) {
                     style={{ ['--source-hue' as string]: String(hueFor(source.domain)) }}
                     aria-hidden="true"
                   >
-                    {initialsFor(source.domain)}
+                    {ref.display}
                   </span>
                   <span className="source__domain">{source.domain}</span>
-                  <span className="source__n">{ref.display}</span>
                 </a>
                 {source.snippet ? (
                   <button
@@ -66,13 +67,30 @@ export function SourcesRow({ refs }: SourcesRowProps) {
 
               {expanded ? (
                 <div className="source__detail">
+                  <span className="source__favicon-row">
+                    <span
+                      className="source__favicon"
+                      style={{ ['--source-hue' as string]: String(hueFor(source.domain)) }}
+                      aria-hidden="true"
+                    >
+                      {initialsFor(source.domain)}
+                    </span>
+                    <a
+                      className="source__title"
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {source.title}
+                    </a>
+                  </span>
                   <a
-                    className="source__title"
+                    className="source__url"
                     href={source.url}
                     target="_blank"
                     rel="noreferrer noopener"
                   >
-                    {source.title}
+                    {source.url}
                   </a>
                   <p className="source__snippet">{source.snippet}</p>
                 </div>

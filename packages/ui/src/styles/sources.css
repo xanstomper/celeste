@@ -279,3 +279,56 @@ html[data-celeste-panel='true'] .source__domain {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Perplexity source chips                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* The badge carries the number the answer cites it by; its colour is derived
+   from a hash of the domain, so a site keeps its colour for the whole thread. */
+.source__badge {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.source__favicon-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.source__favicon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  background: hsl(var(--source-hue, 190) 42% 90%);
+  color: hsl(var(--source-hue, 190) 55% 26%);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.source__url {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.source__url:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+[data-theme='dark'] .source__favicon {
+  background: hsl(var(--source-hue, 190) 32% 24%);
+  color: hsl(var(--source-hue, 190) 60% 84%);
+}

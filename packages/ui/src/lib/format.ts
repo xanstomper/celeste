@@ -45,3 +45,61 @@ export function humanizeToolName(name: string): string {
   if (!cleaned) return name;
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
+
+/** The host of a URL, without the `www.` prefix. */
+export function hostOf(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme).hostname.replace(/^www\./i, '');
+  } catch {
+    return trimmed.replace(/^https?:\/\//i, '').split('/')[0] ?? '';
+  }
+}
+
+function argString(args: Record<string, unknown>, key: string): string | undefined {
+  const value = args[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+/**
+ * The short, human phrase a tool call is shown as.
+ *
+ * Perplexity shows what the agent is *doing* ("Reading example.com"), not the
+ * name of the function it called. This is the same idea, derived from the
+ * tool's arguments.
+ */
+export function toolLabel(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  const url = argString(args, 'url') ?? argString(args, 'href');
+  const domain = url ? hostOf(url) : '';
+  const label = argString(args, 'label') ?? argString(args, 'text') ?? argString(args, 'query');
+  const selector = argString(args, 'selector');
+  const ref = argString(args, 'ref');
+
+  switch (toolName) {
+    case 'browser_navigate':
+      return domain ? `Opening ${domain}` : 'Opening a page';
+    case 'browser_extract':
+      return domain ? `Reading ${domain}` : 'Reading the page';
+    case 'browser_snapshot':
+      return domain ? `Reading ${domain}` : 'Reading the page';
+    case 'browser_click':
+      return label ? `Clicking ${label}` : ref ? `Clicking ${ref}` : 'Clicking an element';
+    case 'browser_type':
+      return ref ? `Typing into ${ref}` : 'Typing';
+    case 'browser_submit_form':
+      return selector ? `Submitting ${selector}` : 'Submitting a form';
+    case 'browser_scroll':
+      return 'Scrolling the page';
+    case 'browser_screenshot':
+      return 'Taking a screenshot';
+    case 'web_search':
+      return label ? `Searching for ${label}` : 'Searching the web';
+    default:
+      return humanizeToolName(toolName);
+  }
+}

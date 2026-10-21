@@ -1,24 +1,39 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { buildCitations, collectSources } from '../lib/citations';
+import type { CitationRef } from '../lib/citations';
 import { formatClockTime } from '../lib/format';
 import { Markdown } from '../lib/markdown';
+import { useTypewriter } from '../lib/typewriter';
+import { EmptyState } from './EmptyState';
+import { Icon } from './Icon';
 import { SourcesRow } from './SourcesRow';
 import { Suggestions } from './Suggestions';
+import { CelesteGlyph } from './Wordmark';
 import type { CanvasKind, CanvasState, Source } from '@celeste/protocol';
 
-const STARTERS = [
-  'Compare the leading AI browsers',
-  'Find the best espresso machine under $500',
-  'How does CRISPR work?',
-  'Summarise today in tech news',
-];
 import type { TimelineItem } from '../state/timeline';
 import { ApprovalCard } from './ApprovalCard';
 import { ArtifactCard } from './ArtifactCard';
-import { Icon } from './Icon';
 import { PlanView } from './PlanView';
 import { ToolCard } from './ToolCard';
+
+/**
+ * The starters offered on the empty thread.
+ *
+ * They are the things an agent that drives a browser is actually good at, and
+ * each one fills the composer instead of firing immediately - an agent that
+ * clicks things deserves a second look before it starts.
+ */
+export const STARTERS = [
+  'Summarise this page',
+  'Compare pricing across these tabs',
+  'Fill this form',
+  'Collect the links on this page',
+  'What did I miss on this page?',
+  'Find the cheapest flight to Lisbon',
+];
 
 export interface TimelineProps {
   items: TimelineItem[];
@@ -31,23 +46,14 @@ export interface TimelineProps {
   taskSources?: Source[];
   /** Starts a new turn from a suggested question. */
   onAsk?: (question: string) => void;
+  /** Puts a suggested question in the composer instead of running it. */
+  onFill?: (question: string) => void;
   /** Opens the task canvas over the thread. */
   onOpenCanvas?: (canvas: CanvasState) => void;
   /** Opens the live browser viewport pane. */
   onOpenBrowser?: () => void;
 }
 
-function reduceMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-/**
- * The event timeline.
- *
- * Renders the folded `DaemonEvent` stream: chat bubbles, collapsible tool
- * cards, the live plan, approval gates, artifact drops and errors.
- */
 /**
  * Copies an answer, and says so for a moment.
  *
@@ -81,6 +87,51 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+/**
+ * One assistant answer.
+ *
+ * The newest answer is revealed character by character so the thread reads as
+ * a live conversation; older ones are shown whole.
+ */
+function AssistantAnswer({
+  text,
+  reveal,
+  citations,
+}: {
+  text: string;
+  reveal: boolean;
+  citations?: Map<number, CitationRef>;
+}) {
+  const shown = useTypewriter(text, reveal);
+  return (
+    <Markdown
+      className="bubble__text bubble__text--prose"
+      content={shown}
+      citations={citations}
+      lead={<CelesteGlyph size={16} className="prose-lead" />}
+    />
+  );
+}
+
+/** Finds the scrollable ancestor of a node. */
+function scrollParent(node: HTMLElement | null): HTMLElement | null {
+  let current: HTMLElement | null = node ? node.parentElement : null;
+  while (current) {
+    const overflow = getComputedStyle(current).overflowY;
+    if (overflow === 'auto' || overflow === 'scroll') return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+/**
+ * The event timeline.
+ *
+ * Renders the folded `DaemonEvent` stream as a Perplexity-style thread: the
+ * reader's own words on the right in a soft bubble, the agent's answers in
+ * full-width prose with a small teal glyph, and every tool call folded into
+ * a quiet pill.
+ */
 export function Timeline({
   items,
   sessionId,
@@ -90,18 +141,47 @@ export function Timeline({
   busy,
   taskSources,
   onAsk,
+  onFill,
   onOpenCanvas,
   onOpenBrowser,
 }: TimelineProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(items.length);
   const streamRef = useRef(0);
+  const followingRef = useRef(true);
+  const lastTopRef = useRef(0);
+  const programmaticRef = useRef(false);
+  const [showJump, setShowJump] = useState(false);
 
   // While the answer streams, the item count does not change but its text
-  // does. Follow it — unless the reader has scrolled back up to read
+  // does. Follow it - unless the reader has scrolled back up to read
   // something, in which case the view stays where they put it.
   const lastItem = items[items.length - 1];
   const streamLength = lastItem?.kind === 'streaming' ? lastItem.text.length : 0;
+
+  const scrollToBottom = useCallback((smooth: boolean) => {
+    const node = bottomRef.current;
+    if (!node) return;
+    const scroller = scrollParent(node);
+    programmaticRef.current = true;
+    if (smooth) {
+      node.scrollIntoView({
+        behavior:
+          typeof window !== 'undefined' &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'auto'
+            : 'smooth',
+        block: 'end',
+      });
+    } else if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+    window.setTimeout(() => {
+      programmaticRef.current = false;
+    }, 420);
+  }, []);
 
   useEffect(() => {
     const added = items.length !== countRef.current;
@@ -109,99 +189,135 @@ export function Timeline({
     countRef.current = items.length;
     streamRef.current = streamLength;
     if (!added && !grew) return;
+    if (!followingRef.current) return;
 
     const node = bottomRef.current;
     if (!node) return;
 
     if (!added) {
-      let scroller: HTMLElement | null = node.parentElement;
-      while (scroller) {
-        const overflow = getComputedStyle(scroller).overflowY;
-        if (overflow === 'auto' || overflow === 'scroll') break;
-        scroller = scroller.parentElement;
-      }
+      const scroller = scrollParent(node);
       if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 240) {
         return;
       }
     }
 
-    node.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'end' });
-  }, [items.length, streamLength]);
+    scrollToBottom(true);
+  }, [items.length, streamLength, scrollToBottom]);
+
+  /* Follow the thread while the reader is at the bottom. */
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const scroller = scrollParent(node);
+    if (!scroller) return;
+
+    lastTopRef.current = scroller.scrollTop;
+
+    const onScroll = () => {
+      if (programmaticRef.current) {
+        lastTopRef.current = scroller.scrollTop;
+        return;
+      }
+      const top = scroller.scrollTop;
+      const delta = top - lastTopRef.current;
+      lastTopRef.current = top;
+
+      // Scrolling up means the reader wants to read something: stop following.
+      if (delta < -4) {
+        followingRef.current = false;
+        setShowJump(true);
+        return;
+      }
+      if (delta > 4) {
+        const distance = scroller.scrollHeight - top - scroller.clientHeight;
+        const atBottom = distance <= 56;
+        followingRef.current = atBottom;
+        setShowJump(!atBottom);
+      }
+    };
+
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
+  /* Content that grows (a revealed answer, an expanding card) keeps the view
+     pinned to the bottom as long as the reader is already there. */
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (!followingRef.current) return;
+      const scroller = scrollParent(node);
+      if (!scroller) return;
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  /* Every source the task has gathered, numbered once for the whole thread.
+     Sources from the live event stream win; the task's own list fills in the
+     ones from before the panel was opened. */
+  const sourceIndex = useMemo(() => {
+    const map = collectSources(items);
+    for (const source of taskSources ?? []) {
+      if (!map.has(source.n)) map.set(source.n, source);
+    }
+    return map;
+  }, [items, taskSources]);
+
+  /* The newest answer is the one that gets the typewriter treatment. */
+  const lastAnswerId = useMemo(() => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (!item) continue;
+      if (item.kind === 'streaming') return null;
+      if (item.kind === 'message' && item.role === 'assistant' && item.text.trim()) return item.id;
+    }
+    return null;
+  }, [items]);
 
   if (items.length === 0) {
     return (
       <div className="timeline timeline--empty">
-        <div className="empty-state">
-          <h1 className="empty-state__title">Where should we go?</h1>
-          <p className="empty-state__text">
-            Ask anything, research deep topics, or tell Celeste what to browse and automate.
-          </p>
-          <div className="empty-state__starters">
-            {STARTERS.map((starter) => (
-              <button
-                type="button"
-                key={starter}
-                className="empty-state__starter"
-                onClick={() => onAsk?.(starter)}
-                disabled={!onAsk}
-              >
-                <span>{starter}</span>
-                <Icon name="arrow-up" size={13} />
-              </button>
-            ))}
-          </div>
-        </div>
+        <EmptyState
+          suggestions={STARTERS}
+          onSubmit={(query) => onAsk?.(query)}
+          onFill={(query) => onFill?.(query)}
+        />
       </div>
     );
   }
 
-  // Every source the task has gathered, numbered once for the whole thread.
-  // Sources from the live event stream win; the task's own list fills in the
-  // ones from before the panel was opened.
-  const sourceIndex = collectSources(items);
-  for (const source of taskSources ?? []) {
-    if (!sourceIndex.has(source.n)) sourceIndex.set(source.n, source);
-  }
-
-  // Only the newest answer carries the source row, so a long thread does not
-  // repeat the same list under every message.
-  const lastAnswerId = [...items]
-    .reverse()
-    .find(
-      (item) => item.kind === 'message' && item.role === 'assistant' && item.text.trim().length > 0,
-    )?.id;
-
   return (
-    <div className="timeline">
+    <div className="timeline" ref={rootRef}>
       {items.map((item) => {
         switch (item.kind) {
           case 'message': {
             if (item.role === 'tool') return null;
             const isUser = item.role === 'user';
             // An assistant turn that only requested tools has no prose of its
-            // own — the tool card says everything. Rendering an empty bubble
+            // own - the tool card says everything. Rendering an empty bubble
             // just adds noise.
             if (!isUser && !item.text.trim()) return null;
             if (isUser) {
               return (
                 <div className="query" key={item.id}>
-                  {item.images && item.images.length > 0 ? (
-                    <div className="bubble__images">
-                      {item.images.map((image, index) => (
-                        <img
-                          key={`${item.id}-image-${index}`}
-                          className="bubble__image"
-                          src={`data:${image.mimeType};base64,${image.data}`}
-                          alt={`Attachment ${index + 1}`}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                  {item.text ? <h2 className="query__text">{item.text}</h2> : null}
-                  <div className="query__meta">
-                    <Icon name="user" size={11} />
-                    <span>You</span>
-                    <time className="bubble__time" dateTime={new Date(item.at).toISOString()}>
+                  <div className="query__bubble">
+                    {item.images && item.images.length > 0 ? (
+                      <div className="bubble__images">
+                        {item.images.map((image, index) => (
+                          <img
+                            key={`${item.id}-image-${index}`}
+                            className="bubble__image"
+                            src={`data:${image.mimeType};base64,${image.data}`}
+                            alt={`Attachment ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    {item.text ? <p className="query__text">{item.text}</p> : null}
+                    <time className="query__time" dateTime={new Date(item.at).toISOString()}>
                       {formatClockTime(item.at)}
                     </time>
                   </div>
@@ -213,15 +329,14 @@ export function Timeline({
             return (
               <div className="bubble bubble--assistant" key={item.id}>
                 <div className="bubble__body">
-                  <Markdown
-                    className="bubble__text bubble__text--prose"
-                    content={item.text}
+                  <AssistantAnswer
+                    text={item.text}
+                    reveal={item.id === lastAnswerId}
                     citations={cites.byNumber}
                   />
                 </div>
                 <div className="bubble__meta">
                   <span className="bubble__author">
-                    <Icon name="bot" size={11} />
                     Celeste
                     {item.name ? <span className="badge badge--model">{item.name}</span> : null}
                   </span>
@@ -230,9 +345,7 @@ export function Timeline({
                   </time>
                   {item.text.trim() ? <CopyButton text={item.text} /> : null}
                 </div>
-                {cites.refs.length > 0 && item.id === lastAnswerId ? (
-                  <SourcesRow refs={cites.refs} />
-                ) : null}
+                {cites.refs.length > 0 ? <SourcesRow refs={cites.refs} /> : null}
               </div>
             );
           }
@@ -247,14 +360,12 @@ export function Timeline({
                     className="bubble__text bubble__text--prose"
                     content={item.text}
                     citations={cites.byNumber}
+                    lead={<CelesteGlyph size={16} className="prose-lead" />}
                   />
                   <span className="bubble__caret" aria-hidden="true" />
                 </div>
                 <div className="bubble__meta">
-                  <span className="bubble__author">
-                    <Icon name="bot" size={11} />
-                    Celeste
-                  </span>
+                  <span className="bubble__author">Celeste</span>
                   <span className="bubble__writing">writing…</span>
                 </div>
               </div>
@@ -393,6 +504,23 @@ export function Timeline({
         }
       })}
       <div ref={bottomRef} />
+
+      {showJump ? (
+        <button
+          type="button"
+          className="jump-latest"
+          onClick={() => {
+            followingRef.current = true;
+            setShowJump(false);
+            scrollToBottom(true);
+          }}
+        >
+          <Icon name="arrow-up" size={12} />
+          Jump to latest
+        </button>
+      ) : null}
     </div>
   );
 }
+
+export type { ReactNode };
