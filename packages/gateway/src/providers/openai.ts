@@ -85,7 +85,9 @@ export class OpenAiCompatibleProvider implements ModelProvider {
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
-    if (request.onDelta) return this.chatStreaming(request);
+    // Some free routers hang on SSE; a plain response is slower to appear but
+    // it actually arrives.
+    if (request.onDelta && this.config.stream !== false) return this.chatStreaming(request);
 
     const body = this.buildBody(request);
     // One retry, not three: the gateway falls back to another provider, which

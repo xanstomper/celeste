@@ -18,6 +18,20 @@ export interface GatewayOptions {
 }
 
 /**
+ * Whether a provider has enough configuration to be worth trying.
+ *
+ * An unconfigured cloud provider fails before it reaches the network, and its
+ * error can mask the real reason the preferred provider did not answer.
+ */
+function isConfigured(config: ProviderConfig): boolean {
+  if (config.apiKey) return true;
+  if (config.apiKeyEnv && process.env[config.apiKeyEnv]) return true;
+  if (config.kind === 'ollama') return true;
+  const url = config.baseUrl ?? '';
+  return url.includes('localhost') || url.includes('127.0.0.1') || url.includes('pollinations');
+}
+
+/**
  * The Universal Model Gateway.
  *
  * Every provider is created lazily and cached. Switching the active model is
@@ -125,7 +139,9 @@ export class ModelGateway {
         errors.push(err);
       }
 
-      const alternatives = this.listProviders().filter((cfg) => cfg.id !== primary.config.id);
+      const alternatives = this.listProviders().filter(
+        (cfg) => cfg.id !== primary.config.id && isConfigured(cfg),
+      );
       for (const cfg of alternatives) {
         if (request.signal?.aborted) throw errors.at(-1);
         try {
@@ -156,7 +172,18 @@ export class ModelGateway {
         );
       }
 
-      throw errors.at(-1);
+      const reasons = [
+        ...new Set(
+          errors.map((error) => (error instanceof Error ? error.message : String(error))),
+        ),
+      ];
+      throw new ProviderError(
+        'gateway',
+        reasons.length > 1
+          ? `No provider could answer. ${reasons.slice(0, 3).join(' | ')}`
+          : (reasons[0] ?? 'No provider could answer.'),
+        { status: 503, retryable: true },
+      );
     }
   }
 

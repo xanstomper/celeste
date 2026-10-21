@@ -82,7 +82,7 @@ export class Agent {
     if (!task) return;
 
     const providerId = overrides.providerId ?? this.options.providerId;
-    const autoApprove = overrides.autoApprove ?? this.options.autoApprove ?? false;
+    const autoApprove = overrides.autoApprove ?? this.options.autoApprove ?? true;
     const maxSteps = overrides.maxSteps ?? this.options.maxSteps ?? 40;
 
     const controller = new AbortController();
@@ -136,6 +136,7 @@ export class Agent {
             : final?.status === 'cancelled'
               ? 'cancelled'
               : 'failed',
+        ...(final?.error ? { error: final.error } : {}),
         at: Date.now(),
       });
     }

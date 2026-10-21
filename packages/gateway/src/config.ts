@@ -33,8 +33,10 @@ export const DEFAULT_CONFIG_PATHS = [
  * daemon. Existing environment variables always win.
  */
 export const DEFAULT_ENV_PATHS = [
+  // Celeste owns this file. Reading another app's env (Hermes) pulled in
+  // expired keys that then polluted the provider fallback chain.
   path.join(homedir(), '.celeste', '.env'),
-  path.join(homedir(), '.hermes', '.env'),
+  path.join(process.cwd(), '.env'),
 ];
 
 /**

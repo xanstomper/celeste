@@ -70,9 +70,13 @@ export function Composer({
   const resize = useCallback(() => {
     const node = textareaRef.current;
     if (!node) return;
+    if (!value.trim()) {
+      node.style.height = '26px';
+      return;
+    }
     node.style.height = 'auto';
     node.style.height = `${Math.min(node.scrollHeight, MAX_HEIGHT)}px`;
-  }, []);
+  }, [value]);
 
   useEffect(() => {
     resize();
@@ -238,37 +242,38 @@ export function Composer({
               type="button"
               role="switch"
               aria-checked={autoApprove}
-              className={`toggle${autoApprove ? ' toggle--on' : ''}`}
+              className={`composer__pill${autoApprove ? ' composer__pill--active' : ''}`}
               onClick={() => onAutoApproveChange(!autoApprove)}
-              title="Automatically approve risky tool calls"
+              title="Automatically approve browser actions"
             >
-              <span className="toggle__track">
-                <span className="toggle__thumb" />
-              </span>
-              <span className="toggle__label">
-                <Icon name="zap" size={12} />
-                Auto-approve risky actions
-              </span>
+              <Icon name="zap" size={12} />
+              <span>{autoApprove ? 'Auto-approve ON' : 'Auto-approve'}</span>
             </button>
           </div>
 
           <div className="composer__right">
             {running && onCancel ? (
-              <button type="button" className="button button--ghost" onClick={() => void onCancel()}>
+              <button
+                type="button"
+                className="composer__stop"
+                onClick={() => void onCancel()}
+                title="Stop task"
+                aria-label="Stop task"
+              >
                 <Icon name="stop" size={13} />
-                Stop
+                <span>Stop</span>
               </button>
             ) : null}
 
             <button
               type="button"
-              className="button button--primary composer__send"
+              className={`composer__send-circle${value.trim().length > 0 || attachments.length > 0 ? ' composer__send-circle--active' : ''}`}
               onClick={submit}
               disabled={busy || (value.trim().length === 0 && attachments.length === 0)}
               aria-label={startingNew ? 'Start task' : 'Send message'}
+              title={startingNew ? 'Start task' : 'Send message'}
             >
-              {busy ? <Icon name="spinner" size={15} /> : <Icon name="send" size={15} />}
-              <span>{busy ? 'Working' : startingNew ? 'Start task' : 'Send'}</span>
+              {busy ? <Icon name="spinner" size={16} /> : <Icon name="arrow-up" size={16} />}
             </button>
           </div>
         </div>
@@ -283,8 +288,7 @@ export function Composer({
       ) : null}
 
       <p className="composer__hint">
-        <Icon name="lock" size={11} />
-        Runs locally · nothing leaves your machine without approval
+        Celeste can make mistakes. Verify critical actions in the live browser.
       </p>
     </div>
   );

@@ -132,13 +132,9 @@ export function Timeline({
     return (
       <div className="timeline timeline--empty">
         <div className="empty-state">
-          <span className="empty-state__icon">
-            <Icon name="sparkle" size={24} />
-          </span>
-          <h2 className="empty-state__title">What do you want to know?</h2>
+          <h1 className="empty-state__title">Where should we go?</h1>
           <p className="empty-state__text">
-            Ask anything, or tell Celeste what to do in your browser. It plans, searches the live web and shows
-            every step.
+            Ask anything, research deep topics, or tell Celeste what to browse and automate.
           </p>
           <div className="empty-state__starters">
             {STARTERS.map((starter) => (
@@ -150,7 +146,7 @@ export function Timeline({
                 disabled={!onAsk}
               >
                 <span>{starter}</span>
-                <Icon name="chevron-right" size={13} />
+                <Icon name="arrow-up" size={13} />
               </button>
             ))}
           </div>

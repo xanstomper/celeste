@@ -345,3 +345,31 @@ describe('terminal dividers', () => {
     expect(items.filter((item) => item.kind === 'message')).toHaveLength(1);
   });
 });
+
+
+describe('failure reasons', () => {
+  it('carries the error from task.done into the snapshot and timeline', () => {
+    const task = {
+      id: 't',
+      title: 'Title',
+      status: 'running',
+      plan: [],
+      messages: [],
+      scratch: {},
+      artifacts: [],
+      createdAt: 1,
+      updatedAt: 1,
+    } as unknown as TaskState;
+
+    const updated = applyEventToTask(task, {
+      type: 'task.done',
+      taskId: 't',
+      status: 'failed',
+      error: { code: 'INTERNAL', message: 'provider exploded' },
+      at: 2,
+    });
+
+    expect(updated.error?.message).toBe('provider exploded');
+    expect(buildTimelineFromTask(updated).some((item) => item.kind === 'error')).toBe(true);
+  });
+});

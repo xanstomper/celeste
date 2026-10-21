@@ -45,6 +45,8 @@ export interface ProviderConfig {
   supportsTools?: boolean;
   /** Whether the provider supports image parts. */
   supportsVision?: boolean;
+  /** Set to false when the provider's streaming endpoint is unreliable. */
+  stream?: boolean;
   /** Requests per minute cap applied client-side. */
   rateLimitRpm?: number;
   /** Extra provider-specific fields merged into the request body. */

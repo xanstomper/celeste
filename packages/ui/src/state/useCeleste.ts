@@ -111,11 +111,10 @@ const SETTINGS_STORAGE_KEY = 'celeste.settings.v1';
 
 const DEFAULT_SETTINGS: Settings = {
   outputDir: '~/celeste-output',
-  autoApprove: false,
+  autoApprove: true,
   extensionPort: 9126,
   apiBase: '',
-  // Light first, like Perplexity's assistant panel.
-  theme: 'light',
+  theme: 'dark',
 };
 
 function loadSettings(): Settings {

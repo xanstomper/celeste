@@ -173,7 +173,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     providerId: options.providerId,
     maxSteps: options.maxSteps ?? config.maxSteps ?? 40,
     outputDir,
-    autoApprove: options.autoApprove,
+    autoApprove: options.autoApprove ?? true,
   });
 
   let daemon: Daemon | null = null;

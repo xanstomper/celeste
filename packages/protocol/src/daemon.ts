@@ -18,6 +18,7 @@ import type {
   SearchFocus,
   Source,
   TaskState,
+  ToolError,
   TaskStatus,
 } from './types.js';
 
@@ -68,7 +69,14 @@ export type DaemonEvent =
   | { type: 'task.artifact'; taskId: string; artifact: Artifact; at: number }
   | { type: 'task.approval'; taskId: string; request: ApprovalRequest; at: number }
   | { type: 'task.human'; taskId: string; reason: string; at: number }
-  | { type: 'task.done'; taskId: string; status: 'completed' | 'failed' | 'cancelled'; at: number }
+  | {
+      type: 'task.done';
+      taskId: string;
+      status: 'completed' | 'failed' | 'cancelled';
+      /** Why the run failed, when it did. */
+      error?: ToolError;
+      at: number;
+    }
   | {
       type: 'task.suggestions';
       taskId: string;
@@ -189,5 +197,7 @@ export const API_ROUTES = {
   browserNavigate: '/api/browser/navigate',
   browserSnapshot: '/api/browser/snapshot',
   browserTabs: '/api/browser/tabs',
+  browserClick: '/api/browser/click',
+  browserType: '/api/browser/type',
   websocket: '/ws',
 } as const;

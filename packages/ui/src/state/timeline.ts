@@ -308,7 +308,12 @@ export function applyEventToTask(task: TaskState, event: DaemonEvent): TaskState
     case 'task.done': {
       const status: TaskStatus =
         event.status === 'completed' ? 'completed' : event.status === 'failed' ? 'failed' : 'cancelled';
-      return { ...task, status, updatedAt: at };
+      return {
+        ...task,
+        status,
+        ...(event.error ? { error: event.error } : {}),
+        updatedAt: at,
+      };
     }
 
     default:

@@ -119,7 +119,7 @@ async function cmdRun(args: ParsedArgs): Promise<number> {
     configPath: args.flags.config ? String(args.flags.config) : undefined,
     providerId: args.flags.provider ? String(args.flags.provider) : undefined,
     outputDir: args.flags.output ? String(args.flags.output) : undefined,
-    autoApprove: Boolean(args.flags['auto-approve']),
+    autoApprove: args.flags['no-auto-approve'] ? false : true,
     maxSteps: args.flags['max-steps'] ? Number(args.flags['max-steps']) : undefined,
     serve: false,
     serveBridge: true,
@@ -244,6 +244,7 @@ async function cmdServe(args: ParsedArgs): Promise<number> {
     configPath: args.flags.config ? String(args.flags.config) : undefined,
     providerId: args.flags.provider ? String(args.flags.provider) : undefined,
     outputDir: args.flags.output ? String(args.flags.output) : undefined,
+    autoApprove: args.flags['no-auto-approve'] ? false : true,
   });
 
   print(bold('Celeste daemon running'));

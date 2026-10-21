@@ -8,7 +8,12 @@ export interface ProviderPickerProps {
   providers: ProviderSummary[];
   activeId: string | null;
   onSwitch: (id: string) => void;
-  variant?: 'compact' | 'panel';
+  /**
+   * - `compact` - a dropdown button for the composer.
+   * - `panel`   - the full list, for the settings modal.
+   * - `pill`    - the header's model pill: the model id, nothing else.
+   */
+  variant?: 'compact' | 'panel' | 'pill';
   busy?: boolean;
   label?: string;
 }
@@ -111,6 +116,19 @@ function ProviderRow({
   );
 }
 
+const GROUP_ORDER = ['Local router', 'VyceAI', 'FreeInference', 'SilkRoute', 'Pollinations', 'Other'];
+
+/** Which family a provider belongs to, so the menu groups related models. */
+function providerGroup(provider: ProviderSummary): string {
+  const url = provider.baseUrl ?? '';
+  if (url.includes(':8705')) return 'Local router';
+  if (url.includes('vyceai.com')) return 'VyceAI';
+  if (url.includes('freeinference.org')) return 'FreeInference';
+  if (url.includes(':8760')) return 'SilkRoute';
+  if (url.includes('pollinations')) return 'Pollinations';
+  return 'Other';
+}
+
 /**
  * Provider switcher.
  *
@@ -135,18 +153,22 @@ export function ProviderPicker({
   // Show models that can actually answer: a resolved key, a keyless
   // provider, or a local runtime. Unconfigured cloud providers are noise in
   // a side panel.
-  const usable = useMemo(
-    () =>
-      providers.filter(
+  const usable = useMemo(() => {
+    const rank = (provider: ProviderSummary) => {
+      const index = GROUP_ORDER.indexOf(providerGroup(provider));
+      return index < 0 ? GROUP_ORDER.length : index;
+    };
+    return providers
+      .filter(
         (provider) =>
           provider.hasKey ||
           provider.id === 'pollinations' ||
           provider.kind === 'ollama' ||
           provider.kind === 'lmstudio' ||
           provider.kind === 'llamacpp',
-      ),
-    [providers],
-  );
+      )
+      .sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label));
+  }, [providers]);
 
   useEffect(() => {
     if (!open) return;
@@ -234,18 +256,28 @@ export function ProviderPicker({
   };
 
   return (
-    <div className="provider-picker" ref={rootRef} onKeyDown={onKeyDown}>
+    <div
+      className={`provider-picker${variant === 'pill' ? ' provider-picker--pill' : ''}`}
+      ref={rootRef}
+      onKeyDown={onKeyDown}
+    >
       <button
         type="button"
-        className="provider-picker__trigger"
+        className={`provider-picker__trigger${variant === 'pill' ? ' provider-picker__trigger--pill' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${label}. Current: ${active?.label ?? 'none'}`}
+        title={active ? `${active.label} · ${active.model}` : label}
         onClick={() => setOpen((value) => !value)}
       >
         <Icon name="sparkle" size={13} />
-        <span className="provider-picker__label">{active?.label ?? 'No provider'}</span>
-        <span className="provider-picker__model">{active?.model ?? ''}</span>
+        {variant === 'pill' ? (
+          <span className="provider-picker__model provider-picker__model--pill">
+            {active?.model ?? 'No model'}
+          </span>
+        ) : (
+          <span className="provider-picker__label">{active?.label ?? 'No provider'}</span>
+        )}
         <Icon name="chevron-down" size={13} />
       </button>
 

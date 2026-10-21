@@ -52,9 +52,11 @@ export type IconName =
   | 'cursor'
   | 'eye'
   | 'maximize'
-  | 'minimize';
+  | 'minimize'
+  | 'arrow-up';
 
 const PATHS: Record<IconName, ReactNode> = {
+  'arrow-up': <path d="M12 19V5M5 12l7-7 7 7" />,
   send: <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" />,
   plus: (
     <>

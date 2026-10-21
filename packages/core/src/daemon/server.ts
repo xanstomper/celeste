@@ -230,6 +230,26 @@ export class Daemon {
         }
       }
 
+      if (route === API_ROUTES.browserClick && method === 'POST') {
+        const body = (await readJson<{ x?: number; y?: number; ref?: string }>(req)) ?? {};
+        try {
+          const clickRes = await this.options.bridge.send('click', body, { timeoutMs: 10000 });
+          return this.sendJson(res, 200, { ok: true, result: clickRes });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      if (route === API_ROUTES.browserType && method === 'POST') {
+        const body = (await readJson<{ text?: string; ref?: string }>(req)) ?? {};
+        try {
+          const typeRes = await this.options.bridge.send('type', body, { timeoutMs: 10000 });
+          return this.sendJson(res, 200, { ok: true, result: typeRes });
+        } catch (err) {
+          return this.sendError(res, 500, 'BROWSER_ERROR', err instanceof Error ? err.message : String(err));
+        }
+      }
+
       // /api/sessions/:id/...
       const sessionMatch = /^\/api\/sessions\/([^/]+)(?:\/(events|approve|cancel|message))?$/.exec(route);
       if (sessionMatch) {
@@ -313,7 +333,7 @@ export class Daemon {
           // message would just sit in the transcript unanswered.
           const overrides = {
             ...(body.providerId ? { providerId: body.providerId } : {}),
-            ...(body.autoApprove !== undefined ? { autoApprove: body.autoApprove } : {}),
+            autoApprove: body.autoApprove !== undefined ? body.autoApprove : true,
           };
           void this.options.agent
             .run(id, overrides)
@@ -388,7 +408,7 @@ export class Daemon {
     // mode for this task only.
     const overrides = {
       ...(body.providerId ? { providerId: body.providerId } : {}),
-      ...(body.autoApprove !== undefined ? { autoApprove: body.autoApprove } : {}),
+      autoApprove: body.autoApprove !== undefined ? body.autoApprove : true,
       ...(body.outputDir ? { outputDir: body.outputDir } : {}),
     };
 

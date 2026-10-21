@@ -109,7 +109,8 @@
       "baseUrl": "http://localhost:8705/v1",
       "model": "glm-5.3-flash",
       "supportsTools": true,
-      "supportsVision": true
+      "supportsVision": true,
+      "stream": false
     },
     {
       "id": "local-minimax",
@@ -118,7 +119,8 @@
       "baseUrl": "http://localhost:8705/v1",
       "model": "minimax-m3",
       "supportsTools": true,
-      "supportsVision": true
+      "supportsVision": true,
+      "stream": false
     },
     {
       "id": "local-qwen",
@@ -127,7 +129,8 @@
       "baseUrl": "http://localhost:8705/v1",
       "model": "qwen3.6-35b",
       "supportsTools": true,
-      "supportsVision": true
+      "supportsVision": true,
+      "stream": false
     },
     {
       "id": "local-deepseek",
@@ -136,7 +139,8 @@
       "baseUrl": "http://localhost:8705/v1",
       "model": "deepseek-v4-flash",
       "supportsTools": true,
-      "supportsVision": false
+      "supportsVision": false,
+      "stream": false
     },
     {
       "id": "local-diffusion",
@@ -145,7 +149,8 @@
       "baseUrl": "http://localhost:8705/v1",
       "model": "diffusiongemma",
       "supportsTools": true,
-      "supportsVision": false
+      "supportsVision": false,
+      "stream": false
     },
     {
       "id": "vyceai-deepseek",

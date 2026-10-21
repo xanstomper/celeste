@@ -8,6 +8,7 @@ import {
 } from '@celeste/protocol';
 import type { BrowserCommand, ExtensionEvent, ProtocolErrorShape } from '@celeste/protocol';
 import { CelesteError } from '@celeste/protocol';
+import { CdpBrowser } from './cdp-browser.js';
 
 /** A pending command awaiting its result from the extension. */
 interface Pending {
@@ -73,6 +74,7 @@ export class BrowserBridge extends EventEmitter {
   private clientMeta: { version?: string; userAgent?: string } = {};
   /** Identifies the extension's service-worker instance. */
   private workerId: string | undefined;
+  private readonly cdpBrowser = new CdpBrowser();
 
   constructor(private readonly options: BridgeOptions) {
     super();
@@ -132,18 +134,26 @@ export class BrowserBridge extends EventEmitter {
   }
 
   get isConnected(): boolean {
-    return this.activeClient() !== undefined;
+    return true;
   }
 
   get info(): BrowserClientInfo | null {
     const client = this.activeClient();
-    if (!client) return null;
+    if (client) {
+      return {
+        id: client.id,
+        connectedAt: client.connectedAt,
+        lastSeenAt: client.lastSeenAt,
+        version: this.clientMeta.version ?? PROTOCOL_VERSION,
+        userAgent: this.clientMeta.userAgent,
+      };
+    }
     return {
-      id: client.id,
-      connectedAt: client.connectedAt,
-      lastSeenAt: client.lastSeenAt,
-      version: this.clientMeta.version,
-      userAgent: this.clientMeta.userAgent,
+      id: 'autonomous-webwrapper',
+      connectedAt: this.connectedAt || Date.now(),
+      lastSeenAt: Date.now(),
+      version: PROTOCOL_VERSION,
+      userAgent: 'Celeste Autonomous WebWrapper',
     };
   }
 
@@ -348,12 +358,10 @@ export class BrowserBridge extends EventEmitter {
     params: Record<string, unknown> = {},
     opts: { tabId?: number; timeoutMs?: number } = {},
   ): Promise<T> {
-    if (!this.isConnected) {
-      throw new CelesteError(
-        'NETWORK_ERROR',
-        'No browser extension is connected. Install the Celeste extension and reload it.',
-        { retryable: true },
-      );
+    const client = this.activeClient();
+    if (!client) {
+      // Autonomous WebWrapper execution path — zero extension required
+      return this.cdpBrowser.send<T>(action, params);
     }
 
     const id = createId('cmd');
