@@ -23,14 +23,16 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # A fresh checkout has no build output, and the packages typecheck
+      # against each other's declarations - so build first.
+      - name: Build
+        run: pnpm build
+
       - name: Typecheck
         run: pnpm -r typecheck
 
       - name: Unit tests
         run: pnpm -r test
-
-      - name: Build
-        run: pnpm build
 
       - name: Extension build output
         run: test -f packages/extension/dist/manifest.json
