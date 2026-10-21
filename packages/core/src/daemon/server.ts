@@ -274,6 +274,37 @@ export class Daemon {
         });
       }
 
+      if (route === API_ROUTES.browserTabs && method === 'POST') {
+        // Switch to another tab of the user's browser.
+        const body = (await readJson<{ tabId?: number; url?: string }>(req)) ?? {};
+        try {
+          if (typeof body.tabId === 'number') {
+            const result = await this.options.bridge.send(
+              'tabs',
+              { action: 'activate', tabId: body.tabId },
+              { timeoutMs: 8000 },
+            );
+            return this.sendJson(res, 200, { ok: true, result });
+          }
+          if (body.url) {
+            const result = await this.options.bridge.send(
+              'tabs',
+              { action: 'create', url: body.url },
+              { timeoutMs: 8000 },
+            );
+            return this.sendJson(res, 200, { ok: true, result });
+          }
+          return this.sendError(res, 400, 'INVALID_ARGS', 'tabId or url is required.');
+        } catch (err) {
+          return this.sendError(
+            res,
+            500,
+            'BROWSER_ERROR',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+
       if (route === API_ROUTES.browserViewport && method === 'POST') {
         // Start or stop the live viewport: a stream of frames of the page the
         // user is looking at, rather than a screenshot every few seconds.

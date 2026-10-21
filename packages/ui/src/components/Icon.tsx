@@ -54,10 +54,24 @@ export type IconName =
   | 'eye'
   | 'maximize'
   | 'minimize'
-  | 'arrow-up';
+  | 'arrow-up'
+  | 'mic'
+  | 'download';
 
 const PATHS: Record<IconName, ReactNode> = {
   'arrow-up': <path d="M12 19V5M5 12l7-7 7 7" />,
+  download: (
+    <>
+      <path d="M12 3v11m0 0 4-4m-4 4-4-4" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </>
+  ),
+  mic: (
+    <>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </>
+  ),
   send: <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" />,
   plus: (
     <>

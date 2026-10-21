@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserActionInfo } from '@celeste/protocol';
 import { Icon } from './Icon';
+import { hostOf } from '../lib/format';
 
 export interface BrowserWrapperProps {
   activeAction?: BrowserActionInfo | null;
@@ -15,6 +16,10 @@ export interface BrowserWrapperProps {
   onScroll?: (deltaY: number) => Promise<void> | void;
   onCaptureScreenshot?: () => Promise<string | void> | void;
   onAsk?: (prompt: string) => Promise<void> | void;
+  /** Lists the tabs open in the browser. */
+  onListTabs?: () => Promise<{ id: number; title: string; url: string; active?: boolean }[]>;
+  /** Switches the browser to another tab. */
+  onSwitchTab?: (tabId: number) => Promise<void> | void;
 }
 
 export function BrowserWrapper({
@@ -29,12 +34,16 @@ export function BrowserWrapper({
   onScroll,
   onCaptureScreenshot,
   onAsk,
+  onListTabs,
+  onSwitchTab,
 }: BrowserWrapperProps) {
   const [urlInput, setUrlInput] = useState('');
   const [selectedActionIndex, setSelectedActionIndex] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [zoomModal, setZoomModal] = useState(false);
   const [showTypeInput, setShowTypeInput] = useState(false);
+  const [tabs, setTabs] = useState<{ id: number; title: string; url: string; active?: boolean }[]>([]);
+  const [showTabs, setShowTabs] = useState(false);
   const [typeText, setTypeText] = useState('');
   const [userRipple, setUserRipple] = useState<{ x: number; y: number; time: number } | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -213,6 +222,53 @@ export function BrowserWrapper({
 
         {/* Browser Engine Status & Quick Actions */}
         <div className="browser-wrapper__actions">
+          {onListTabs ? (
+            <div className="browser-wrapper__tabs">
+              <button
+                type="button"
+                className={`browser-wrapper__tab-btn${showTabs ? ' browser-wrapper__tab-btn--on' : ''}`}
+                onClick={async () => {
+                  const next = !showTabs;
+                  setShowTabs(next);
+                  if (!next) return;
+                  try {
+                    const found = await onListTabs();
+                    setTabs(found);
+                  } catch {
+                    setTabs([]);
+                  }
+                }}
+                title="Tabs open in your browser"
+              >
+                <Icon name="list" size={13} />
+                <span>Tabs</span>
+                {tabs.length > 0 ? <span className="browser-wrapper__tab-count">{tabs.length}</span> : null}
+              </button>
+              {showTabs ? (
+                <div className="browser-wrapper__tab-menu" role="menu">
+                  {tabs.length === 0 ? (
+                    <p className="browser-wrapper__tab-empty">No tabs found.</p>
+                  ) : (
+                    tabs.map((tab) => (
+                      <button
+                        type="button"
+                        key={tab.id}
+                        role="menuitem"
+                        className={`browser-wrapper__tab${tab.active ? ' browser-wrapper__tab--active' : ''}`}
+                        onClick={async () => {
+                          setShowTabs(false);
+                          await onSwitchTab?.(tab.id);
+                        }}
+                      >
+                        <span className="browser-wrapper__tab-title">{tab.title || tab.url}</span>
+                        <span className="browser-wrapper__tab-url">{hostOf(tab.url)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div
             className="browser-status-pill browser-status-pill--active"
             title="Autonomous Web Engine active (direct browser control)"

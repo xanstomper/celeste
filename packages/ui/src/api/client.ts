@@ -153,6 +153,8 @@ export interface DaemonTransport {
   getBrowserScreenshot?(): Promise<{ data: string | null; mimeType: string }>;
   navigateBrowser?(url: string): Promise<{ ok: boolean; result?: unknown }>;
   getBrowserTabs?(): Promise<{ ok: boolean; tabs?: unknown }>;
+  /** Switches the browser to another tab. */
+  switchTab?(tabId: number): Promise<{ ok: boolean; result?: unknown }>;
   clickBrowser?(point: { x: number; y: number }, ref?: string): Promise<{ ok: boolean; result?: unknown }>;
   typeBrowser?(text: string, ref?: string): Promise<{ ok: boolean; result?: unknown }>;
   scrollBrowser?(deltaY?: number): Promise<{ ok: boolean; result?: unknown }>;
@@ -260,6 +262,13 @@ export class HttpTransport implements DaemonTransport {
 
   async getBrowserTabs(): Promise<{ ok: boolean; tabs?: unknown }> {
     return request(this.base, API_ROUTES.browserTabs);
+  }
+
+  async switchTab(tabId: number): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserTabs, {
+      method: 'POST',
+      body: { tabId },
+    });
   }
 
   async clickBrowser(point: { x: number; y: number }, ref?: string): Promise<{ ok: boolean; result?: unknown }> {

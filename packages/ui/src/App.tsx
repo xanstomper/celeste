@@ -18,6 +18,7 @@ import { usePanelMode, useMediaQuery } from './lib/panel';
 import { CelesteProvider } from './state/CelesteProvider';
 import { useCeleste } from './state/useCeleste';
 import { statusLabel } from './state/timeline';
+import { threadFileName, threadToMarkdown } from './lib/thread-export';
 
 function Workspace() {
   const { state, actions, timeline, activeTask, effectiveApiBase } = useCeleste();
@@ -181,6 +182,22 @@ function Workspace() {
     },
     [actions, composerMode, focus, research, state.activeSessionId],
   );
+
+  /** Saves the conversation as a Markdown file. */
+  const exportThread = useCallback(() => {
+    if (!activeTask) return;
+    const markdown = threadToMarkdown(activeTask);
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = threadFileName(activeTask);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    actions.notify('ok', 'Thread exported as Markdown.');
+  }, [actions, activeTask]);
 
   /** Drops a suggestion into the composer so the reader can edit it first. */
   const fillComposer = useCallback((text: string) => {
@@ -420,6 +437,17 @@ function Workspace() {
                   Stop task
                 </button>
               ) : null}
+              {activeTask ? (
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={exportThread}
+                  title="Save this conversation as Markdown"
+                >
+                  <Icon name="download" size={13} />
+                  Export
+                </button>
+              ) : null}
               <button type="button" className="button button--ghost" onClick={startNewTask}>
                 <Icon name="plus" size={13} />
                 New task
@@ -461,6 +489,7 @@ function Workspace() {
                     research={research}
                     onResearchChange={setResearch}
                     onSend={handleSend}
+                    onNotice={(message) => actions.notify('warn', message)}
                     page={state.activeTab}
                     busy={state.busy}
                     hasSession={state.activeSessionId !== null && composerMode === 'reply'}
@@ -486,6 +515,8 @@ function Workspace() {
                     onType={(text, ref) => void actions.typeBrowser(text, ref)}
                     onScroll={(deltaY) => void actions.scrollBrowser(deltaY)}
                     onCaptureScreenshot={() => actions.captureScreenshot()}
+                    onListTabs={actions.listTabs}
+                    onSwitchTab={actions.switchTab}
                     onAsk={(prompt) => void actions.sendMessage(prompt)}
                   />
                 ) : (

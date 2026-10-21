@@ -182,6 +182,32 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'select', id: null });
   }, []);
 
+  /** The tabs open in the user's browser. */
+  const listTabs = useCallback(async () => {
+    const current = transportRef.current;
+    if (!current) return [] as { id: number; title: string; url: string; active?: boolean }[];
+    try {
+      const result = await current.getBrowserTabs?.();
+      const payload = result as { tabs?: unknown } | undefined;
+      const tabs = payload?.tabs;
+      if (!Array.isArray(tabs)) return [];
+      return tabs as { id: number; title: string; url: string; active?: boolean }[];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  /** Switches the browser to another tab. */
+  const switchTab = useCallback(async (tabId: number) => {
+    const current = transportRef.current;
+    if (!current) return;
+    try {
+      await current.switchTab?.(tabId);
+    } catch {
+      /* the tab may have closed */
+    }
+  }, []);
+
   /**
    * Refreshes the page the user's browser is showing.
    *
@@ -578,6 +604,8 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       startViewport,
       stopViewport,
       refreshActiveTab,
+      listTabs,
+      switchTab,
       createSession,
       sendMessage,
       respondApproval,
@@ -601,6 +629,8 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
       startViewport,
       stopViewport,
       refreshActiveTab,
+      listTabs,
+      switchTab,
       createSession,
       sendMessage,
       respondApproval,

@@ -89,6 +89,10 @@ export interface CelesteActions {
   startViewport: () => Promise<void>;
   /** Refreshes what page the user's browser is showing. */
   refreshActiveTab: () => Promise<void>;
+  /** The tabs open in the user's browser. */
+  listTabs: () => Promise<{ id: number; title: string; url: string; active?: boolean }[]>;
+  /** Switches the browser to another tab. */
+  switchTab: (tabId: number) => Promise<void>;
   /** Stops the live viewport stream. */
   stopViewport: () => Promise<void>;
   createSession: (

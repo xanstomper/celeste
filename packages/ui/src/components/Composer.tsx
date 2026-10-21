@@ -7,6 +7,32 @@ import { Icon } from './Icon';
 import { ProviderPicker } from './ProviderPicker';
 import { hostOf } from '../lib/format';
 
+/* Minimal Web Speech API types: the panel can dictate without a dependency. */
+interface SpeechRecognitionAlternative {
+  transcript: string;
+}
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  [index: number]: SpeechRecognitionAlternative;
+}
+interface SpeechRecognitionEvent {
+  resultIndex: number;
+  results: { length: number; [index: number]: SpeechRecognitionResult };
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+
 export interface ComposerProps {
   providers: ProviderSummary[];
   activeProviderId: string | null;
@@ -22,6 +48,8 @@ export interface ComposerProps {
   research?: boolean;
   onResearchChange?: (value: boolean) => void;
   onSend: (content: string, attachments?: Attachment[]) => void | Promise<void>;
+  /** Reports something the reader should know (no dictation, no camera...). */
+  onNotice?: (message: string) => void;
   busy?: boolean;
   hasSession: boolean;
   onCancel?: () => void;
@@ -67,6 +95,7 @@ export function Composer({
   research = false,
   onResearchChange,
   onSend,
+  onNotice,
   busy = false,
   hasSession,
   onCancel,
@@ -79,6 +108,8 @@ export function Composer({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   // "Ask about this page": the agent is told which page the reader means.
   const [usePage, setUsePage] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const startingNew = mode === 'new' || !hasSession;
@@ -158,6 +189,58 @@ export function Composer({
       reader.readAsDataURL(file);
     }
   }, []);
+
+  /**
+   * Dictation.
+   *
+   * The browser's own speech recognition does the work, so nothing is
+   * uploaded anywhere: the words land straight in the composer.
+   */
+  const toggleDictation = useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setListening(false);
+      return;
+    }
+
+    const scope = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    const Recognition = scope.SpeechRecognition ?? scope.webkitSpeechRecognition;
+    if (!Recognition) {
+      onNotice?.('This browser cannot listen - type instead.');
+      return;
+    }
+
+    try {
+      const recognition = new Recognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          transcript += event.results[index]?.[0]?.transcript ?? '';
+        }
+        setValue((current) => (current ? `${current} ${transcript}` : transcript));
+      };
+      recognition.onend = () => {
+        setListening(false);
+        recognitionRef.current = null;
+      };
+      recognition.onerror = () => {
+        setListening(false);
+        recognitionRef.current = null;
+      };
+      recognition.start();
+      recognitionRef.current = recognition;
+      setListening(true);
+    } catch {
+      onNotice?.('Dictation could not start - type instead.');
+    }
+  }, [listening, onNotice]);
 
   const submit = useCallback(() => {
     const trimmed = value.trim();
@@ -281,6 +364,18 @@ export function Composer({
             >
               <Icon name="paperclip" size={15} />
             </button>
+            <button
+              type="button"
+              className={`composer__mic${listening ? ' composer__mic--on' : ''}`}
+              onClick={toggleDictation}
+              disabled={busy}
+              title={listening ? 'Stop dictation' : 'Dictate'}
+              aria-label={listening ? 'Stop dictation' : 'Dictate'}
+              aria-pressed={listening}
+            >
+              <Icon name="mic" size={15} />
+            </button>
+
             <input
               ref={fileRef}
               type="file"
