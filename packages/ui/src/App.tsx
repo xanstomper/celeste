@@ -264,7 +264,7 @@ function Workspace() {
           className="icon-button"
           onClick={() => setPaletteOpen(true)}
           aria-label="Open command palette"
-          title="Command palette (Cmd/Ctrl+K)"
+          title={panel ? 'Command palette' : 'Command palette (Cmd/Ctrl+K)'}
         >
           <Icon name="search" size={16} />
         </button>

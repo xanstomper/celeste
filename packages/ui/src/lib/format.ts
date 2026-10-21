@@ -103,3 +103,52 @@ export function toolLabel(
       return humanizeToolName(toolName);
   }
 }
+
+/**
+ * Model names, written the way a person would say them.
+ *
+ * `glm-5.3-flash` becomes `GLM-5.3-Flash` — the raw id is useful in logs,
+ * but a header chip should read like a product name.
+ */
+const MODEL_ACRONYMS: Record<string, string> = {
+  ai: 'AI',
+  atria: 'Atria',
+  chat: 'Chat',
+  claude: 'Claude',
+  code: 'Code',
+  deepseek: 'DeepSeek',
+  diffusiongemma: 'DiffusionGemma',
+  flash: 'Flash',
+  free: 'Free',
+  gemma: 'Gemma',
+  glm: 'GLM',
+  gpt: 'GPT',
+  llama: 'Llama',
+  llm: 'LLM',
+  luna: 'Luna',
+  minimax: 'MiniMax',
+  openai: 'OpenAI',
+  preview: 'Preview',
+  pro: 'Pro',
+  qwen: 'Qwen',
+  sonnet: 'Sonnet',
+  sr: 'SR',
+  turbo: 'Turbo',
+};
+
+export function modelName(model: string): string {
+  if (!model) return model;
+  return model
+    .split('-')
+    .map((part) => {
+      if (!part) return part;
+      const key = part.toLowerCase();
+      if (MODEL_ACRONYMS[key]) return MODEL_ACRONYMS[key]!;
+      // Version-ish parts keep their shape: 5.3, 35B, v4, 2.
+      const version = /^(\d[\d.]*)([a-z])$/.exec(part);
+      if (version) return `${version[1]}${version[2]!.toUpperCase()}`;
+      if (/^\d/.test(part) || /^v\d/.test(part)) return part;
+      return part[0]!.toUpperCase() + part.slice(1);
+    })
+    .join('-');
+}

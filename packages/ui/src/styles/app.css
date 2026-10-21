@@ -2853,31 +2853,6 @@ button.provider:hover:not(:disabled) {
 /* Perplexity-style turns                                                      */
 /* -------------------------------------------------------------------------- */
 
-.query {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 8px 2px 0;
-}
-
-.query__text {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.query__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-faint);
-  font-size: 10.5px;
-}
-
 .bubble--assistant {
   max-width: 100%;
 }
@@ -4058,10 +4033,13 @@ button.provider:hover:not(:disabled) {
 }
 
 .provider-picker__model--pill {
+  /* The narrow-viewport rule hides the compact variant's model id; the header
+     pill always shows it, so it opts back in. */
+  display: inline;
   font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 550;
-  max-width: 104px;
+  max-width: 132px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4196,31 +4174,31 @@ button.provider:hover:not(:disabled) {
   gap: 10px;
 }
 
-/* The reader's own words: a soft bubble on the right, no avatar. */
+/* The reader's own words: a large, left-aligned heading - the way Perplexity
+   sets the question above the answer. No bubble, no avatar. */
 .query {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  align-self: flex-end;
-  max-width: 85%;
-  padding: 0;
+  align-items: flex-start;
+  align-self: stretch;
+  max-width: 100%;
+  padding: 10px 0 2px;
   gap: 0;
 }
 
 .query__bubble {
   max-width: 100%;
-  padding: 9px 14px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--bubble-user);
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .query__text {
   margin: 0;
-  font-size: 14.5px;
-  font-weight: 450;
-  line-height: 1.55;
-  letter-spacing: -0.006em;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
   color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -4228,10 +4206,10 @@ button.provider:hover:not(:disabled) {
 
 .query__time {
   display: block;
-  margin-top: 4px;
-  font-size: 10px;
+  margin-top: 5px;
+  font-size: 10.5px;
   color: var(--text-faint);
-  text-align: right;
+  text-align: left;
 }
 
 /* The small teal glyph at the left of the first line of an answer. */

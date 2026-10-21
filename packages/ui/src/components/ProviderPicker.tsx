@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { ProviderSummary } from '@celeste/protocol';
 
+import { modelName } from '../lib/format';
 import { Icon } from './Icon';
 
 export interface ProviderPickerProps {
@@ -273,7 +274,7 @@ export function ProviderPicker({
         <Icon name="sparkle" size={13} />
         {variant === 'pill' ? (
           <span className="provider-picker__model provider-picker__model--pill">
-            {active?.model ?? 'No model'}
+            {active ? modelName(active.model) : 'No model'}
           </span>
         ) : (
           <span className="provider-picker__label">{active?.label ?? 'No provider'}</span>

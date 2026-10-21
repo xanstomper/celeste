@@ -30,7 +30,7 @@ from the status bar (`Demo mode`) or the command palette.
 ```
 src/
   main.tsx                 React root
-  App.tsx                  Layout shell, shortcuts, overlays
+  App.tsx                  Layout shell, shortcuts, overlays, panel mode
   api/
     client.ts              Typed HTTP/SSE/WS client + DaemonTransport contract
     connect.ts             Live-vs-mock bootstrap (auto fallback lives here)
@@ -43,16 +43,35 @@ src/
   components/              Sidebar, Composer, Timeline, ToolCard, JsonView,
                            PlanView, ApprovalCard, ArtifactCard,
                            ProviderPicker, StatusBar, CommandPalette,
-                           SettingsPanel, Icon
-  lib/                     Fuzzy matcher + formatting helpers
-  styles/                  theme.css (tokens) + app.css (layout)
+                           SettingsPanel, ThreadMenu, EmptyState, Wordmark,
+                           SourcesRow, Suggestions, Icon
+  lib/                     Markdown renderer, citations, fuzzy matcher,
+                           formatting helpers, panel detection, typewriter
+  styles/                  theme.css (tokens) + app.css (layout) +
+                           markdown.css / sources.css / panel.css
 ```
 
 ### No dependencies beyond React
 
 Everything is hand rolled on purpose: the JSON syntax highlighter, the fuzzy
-matcher, the SVG icon set, the state management and the menus. React and
-ReactDOM are the only runtime dependencies.
+matcher, the Markdown renderer, the SVG icon set, the wordmark, the state
+management and the menus. React and ReactDOM are the only runtime dependencies.
+
+## Panel mode
+
+The same client runs as a full page and as a browser side panel (~400px,
+docked to the right of the page, like Perplexity Comet).
+
+Panel mode is detected in `src/lib/panel.ts` from either
+
+- `data-celeste-panel="true"` on `<html>` — the extension's `sidepanel.html`
+  sets it, or
+- a viewport narrower than 640px.
+
+The resolved state is mirrored back onto `<html>` so `styles/panel.css` can
+tighten the layout, and the React tree drops the session sidebar and the
+status bar, replacing the sidebar with a compact thread switcher in the
+header.
 
 ## Keyboard
 

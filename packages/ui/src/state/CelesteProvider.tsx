@@ -243,6 +243,31 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
         return;
       }
       dispatch({ type: 'busy', busy: true });
+      // Echo the prompt locally so the reader sees their own words straight
+      // away, instead of waiting for the daemon to stream it back.
+      dispatch({
+        type: 'event',
+        sessionId,
+        event: {
+          type: 'task.message',
+          taskId: sessionId,
+          message: {
+            role: 'user',
+            content:
+              attachments && attachments.length > 0
+                ? [
+                    { type: 'text' as const, text: trimmed },
+                    ...attachments.map((attachment) => ({
+                      type: 'image' as const,
+                      data: attachment.data,
+                      mimeType: attachment.mimeType,
+                    })),
+                  ]
+                : trimmed,
+          },
+          at: Date.now(),
+        },
+      });
       try {
         await current.sendMessage(sessionId, trimmed, attachments);
       } catch (err) {

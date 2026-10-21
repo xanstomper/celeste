@@ -277,20 +277,20 @@ export function Timeline({
     return null;
   }, [items]);
 
-  if (items.length === 0) {
-    return (
-      <div className="timeline timeline--empty">
+  return (
+    <div
+      className={`timeline${items.length === 0 ? ' timeline--empty' : ''}`}
+      ref={rootRef}
+      aria-live="polite"
+      aria-label="Conversation"
+    >
+      {items.length === 0 ? (
         <EmptyState
           suggestions={STARTERS}
           onSubmit={(query) => onAsk?.(query)}
           onFill={(query) => onFill?.(query)}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="timeline" ref={rootRef}>
+      ) : null}
       {items.map((item) => {
         switch (item.kind) {
           case 'message': {
