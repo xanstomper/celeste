@@ -5077,3 +5077,28 @@ h4.canvas-heading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---- composer: document attachments -------------------------------------- */
+
+.attachment--file {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+
+.attachment--file .icon {
+  color: var(--accent);
+  flex: none;
+}
+
+.attachment__name {
+  max-width: 160px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

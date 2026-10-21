@@ -42,6 +42,10 @@ export interface ComposerProps {
 
 const MAX_HEIGHT = 220;
 const MAX_IMAGES = 4;
+/** Documents ride along too: a PDF becomes text the model can read. */
+const MAX_DOCUMENTS = 3;
+/** Documents are text; a few megabytes is plenty. */
+const MAX_DOCUMENT_BYTES = 12 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 /**
@@ -112,6 +116,14 @@ export function Composer({
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const images = [...files].filter((file) => file.type.startsWith('image/'));
+    const documents = [...files].filter(
+      (file) =>
+        !file.type.startsWith('image/') &&
+        (file.type.startsWith('text/') ||
+          file.type === 'application/pdf' ||
+          file.type === 'application/json'),
+    );
+
     for (const file of images) {
       if (file.size > MAX_IMAGE_BYTES) continue;
       const reader = new FileReader();
@@ -120,11 +132,28 @@ export function Composer({
         const comma = result.indexOf(',');
         if (comma < 0) return;
         const data = result.slice(comma + 1);
-        setAttachments((current) =>
-          current.length >= MAX_IMAGES
-            ? current
-            : [...current, { name: file.name || 'pasted image', mimeType: file.type, data }],
-        );
+        setAttachments((current) => {
+          const images_ = current.filter((item) => item.mimeType.startsWith('image/'));
+          if (images_.length >= MAX_IMAGES) return current;
+          return [...current, { name: file.name || 'pasted image', mimeType: file.type, data }];
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    for (const file of documents) {
+      if (file.size > MAX_DOCUMENT_BYTES) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const comma = result.indexOf(',');
+        if (comma < 0) return;
+        const data = result.slice(comma + 1);
+        setAttachments((current) => {
+          const documents_ = current.filter((item) => !item.mimeType.startsWith('image/'));
+          if (documents_.length >= MAX_DOCUMENTS) return current;
+          return [...current, { name: file.name || 'document', mimeType: file.type, data }];
+        });
       };
       reader.readAsDataURL(file);
     }
@@ -197,11 +226,21 @@ export function Composer({
         {attachments.length > 0 ? (
           <div className="composer__attachments" aria-label="Attached images">
             {attachments.map((attachment, index) => (
-              <figure className="attachment" key={`${attachment.name}-${index}`}>
-                <img
-                  src={`data:${attachment.mimeType};base64,${attachment.data}`}
-                  alt={attachment.name}
-                />
+              <figure
+                className={`attachment${attachment.mimeType.startsWith('image/') ? '' : ' attachment--file'}`}
+                key={`${attachment.name}-${index}`}
+              >
+                {attachment.mimeType.startsWith('image/') ? (
+                  <img
+                    src={`data:${attachment.mimeType};base64,${attachment.data}`}
+                    alt={attachment.name}
+                  />
+                ) : (
+                  <>
+                    <Icon name="file" size={16} />
+                    <span className="attachment__name">{attachment.name}</span>
+                  </>
+                )}
                 <button
                   type="button"
                   className="attachment__remove"
@@ -209,7 +248,7 @@ export function Composer({
                     setAttachments((current) => current.filter((_, at) => at !== index))
                   }
                   aria-label={`Remove ${attachment.name}`}
-                  title="Remove image"
+                  title="Remove attachment"
                 >
                   <Icon name="x" size={10} />
                 </button>
@@ -236,16 +275,16 @@ export function Composer({
               type="button"
               className="composer__attach"
               onClick={() => fileRef.current?.click()}
-              disabled={busy || attachments.length >= MAX_IMAGES}
-              title="Attach images (or paste, or drop them here)"
-              aria-label="Attach images"
+              disabled={busy || attachments.length >= MAX_IMAGES + MAX_DOCUMENTS}
+              title="Attach images or documents (or paste, or drop them here)"
+              aria-label="Attach images or documents"
             >
               <Icon name="paperclip" size={15} />
             </button>
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,text/plain,text/markdown,text/csv,application/json,.pdf,.txt,.md,.csv,.json"
               multiple
               hidden
               onChange={(event) => {

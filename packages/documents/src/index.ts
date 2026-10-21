@@ -73,3 +73,6 @@ export {
 } from './blocks.js';
 
 export type { LoadedImage, NormalisedTable, RasterType, ResolvedTheme } from './blocks.js';
+
+export { extractPdfText } from './read-pdf.js';
+export type { ExtractedPdf } from './read-pdf.js';

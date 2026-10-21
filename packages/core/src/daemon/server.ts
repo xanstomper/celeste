@@ -13,6 +13,7 @@ import type {
   DaemonEvent,
   ProviderSwitchRequest,
 } from '@celeste/protocol';
+import { extractPdfText } from '@celeste/documents';
 import type { ModelGateway } from '@celeste/gateway';
 import type { Agent } from '../agent/agent.js';
 import type { ApprovalManager } from '../agent/approval.js';
@@ -77,6 +78,72 @@ function findUiDist(): string | null {
  * Deliberately dependency-light: Node's own `http` server plus `ws` for the
  * live event stream. No framework, no middleware chain, no magic.
  */
+/** Document types the agent can read as text. */
+const READABLE_DOCUMENTS = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/json',
+  'text/html',
+]);
+
+function isReadableDocument(mimeType: string): boolean {
+  return READABLE_DOCUMENTS.has(mimeType.toLowerCase().split(';')[0]!.trim());
+}
+
+/**
+ * Turns attached documents into text parts.
+ *
+ * A PDF is the interesting one: the model cannot open a file, so the words
+ * have to travel with the message. When a PDF cannot be read - a scan, an
+ * exotic encoding - the model is told that instead of being left guessing.
+ */
+async function documentPartsFor(
+  attachments: Attachment[],
+): Promise<{ type: 'text'; text: string }[]> {
+  const parts: { type: 'text'; text: string }[] = [];
+
+  for (const attachment of attachments) {
+    const mimeType = attachment.mimeType.toLowerCase().split(';')[0]!.trim();
+    if (!isReadableDocument(mimeType)) continue;
+
+    if (mimeType === 'application/pdf') {
+      let text = '';
+      let pages = 0;
+      let readable = false;
+      try {
+        const extracted = extractPdfText(Buffer.from(attachment.data, 'base64'));
+        text = extracted.text;
+        pages = extracted.pages;
+        readable = extracted.readable;
+      } catch {
+        readable = false;
+      }
+      parts.push({
+        type: 'text',
+        text: readable
+          ? `Attached document: ${attachment.name} (${pages || '?'} pages)\n\n${text}`
+          : `Attached document: ${attachment.name}. Its text could not be extracted (it may be a scan). Ask the user for the relevant part.`,
+      });
+      continue;
+    }
+
+    let text = '';
+    try {
+      text = Buffer.from(attachment.data, 'base64').toString('utf8');
+    } catch {
+      text = '';
+    }
+    parts.push({
+      type: 'text',
+      text: `Attached document: ${attachment.name}\n\n${text.slice(0, 60_000)}`,
+    });
+  }
+
+  return parts;
+}
+
 export class Daemon {
   private readonly server = createServer();
   private wss: WebSocketServer | null = null;
@@ -505,7 +572,9 @@ export class Daemon {
   private async createSession(body: CreateSessionRequest) {
     const rawPrompt = String(body.prompt ?? '').trim();
 
-    // Images ride along as content parts; only real images, and only a few.
+    // Attachments ride along as content parts: images stay images, and
+    // documents are read so the model gets the words rather than a file it
+    // cannot open.
     const attachments = (body.attachments ?? [])
       .filter(
         (a) =>
@@ -513,12 +582,15 @@ export class Daemon {
           typeof a.data === 'string' &&
           a.data.length > 0 &&
           typeof a.mimeType === 'string' &&
-          a.mimeType.startsWith('image/'),
+          (a.mimeType.startsWith('image/') || isReadableDocument(a.mimeType)),
       )
       .slice(0, 6);
     if (!rawPrompt && attachments.length === 0) throw new Error('A prompt is required.');
 
     const prompt = rawPrompt || 'Describe this image.';
+
+    // Turn documents into text the model can actually read.
+    const documentParts = await documentPartsFor(attachments);
 
     // Only the modes we know how to research; anything else is the open web.
     const focus = body.focus === 'academic' || body.focus === 'news' ? body.focus : undefined;
@@ -535,6 +607,7 @@ export class Daemon {
                 data: a.data,
                 mimeType: a.mimeType,
               })),
+              ...documentParts,
             ]
           : prompt,
     });

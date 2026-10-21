@@ -57,6 +57,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@celeste/documents':
+        specifier: workspace:*
+        version: link:../documents
       '@celeste/gateway':
         specifier: workspace:*
         version: link:../gateway

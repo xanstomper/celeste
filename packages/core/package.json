@@ -25,7 +25,8 @@
     "@celeste/gateway": "workspace:*",
     "@celeste/protocol": "workspace:*",
     "@celeste/tools": "workspace:*",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "@celeste/documents": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
