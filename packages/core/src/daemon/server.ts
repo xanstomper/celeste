@@ -202,7 +202,7 @@ export class Daemon {
         }
       }
 
-      if (route === API_ROUTES.browserSnapshot && method === 'POST') {
+      if (route === API_ROUTES.browserSnapshot && (method === 'GET' || method === 'POST')) {
         if (!this.options.bridge.isConnected) {
           return this.sendError(res, 503, 'EXTENSION_DISCONNECTED', 'Browser extension is not connected.');
         }
