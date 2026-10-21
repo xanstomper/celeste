@@ -155,6 +155,42 @@ export interface CanvasFile {
 }
 
 /**
+ * One piece of a visual canvas.
+ *
+ * A visual canvas is a *designed board*, not a web page: the agent describes
+ * it in blocks and the panel renders it natively - real cards, real charts,
+ * real type - so it looks the same everywhere and can be edited in place.
+ */
+export type CanvasBlock =
+  | { type: 'heading'; text: string; level?: 1 | 2 | 3 }
+  | { type: 'text'; text: string; tone?: 'default' | 'muted' | 'lead' }
+  | { type: 'kpi'; label: string; value: string; delta?: string; trend?: 'up' | 'down' | 'flat' }
+  | {
+      type: 'chart';
+      title?: string;
+      chart: 'bar' | 'line' | 'donut';
+      labels: string[];
+      values: number[];
+      unit?: string;
+    }
+  | { type: 'table'; title?: string; columns: string[]; rows: string[][] }
+  | { type: 'image'; url: string; caption?: string; alt?: string }
+  | { type: 'list'; title?: string; items: string[]; ordered?: boolean }
+  | { type: 'quote'; text: string; cite?: string }
+  | { type: 'code'; language?: string; code: string }
+  | { type: 'divider' }
+  | { type: 'spacer'; size?: 'sm' | 'md' | 'lg' };
+
+/** A whole visual canvas. */
+export interface CanvasSpec {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  theme?: 'light' | 'dark';
+  blocks: CanvasBlock[];
+}
+
+/**
  * A workspace the agent builds beside the conversation.
  *
  * - `document` — Markdown report.
@@ -168,6 +204,13 @@ export interface CanvasState {
   title: string;
   /** Markdown, HTML, or image URL depending on `kind`. */
   content: string;
+  /**
+   * The structured board, for a `visual` canvas.
+   *
+   * When present the panel draws the canvas itself; `content` then holds the
+   * same document as JSON.
+   */
+  spec?: CanvasSpec;
   files?: CanvasFile[];
   updatedAt: number;
 }

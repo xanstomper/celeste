@@ -49,6 +49,32 @@ export class ModelGateway {
     for (const cfg of providerConfigs) this.configById.set(cfg.id, cfg);
   }
 
+  /** Providers that answered 429, and when they may be tried again. */
+  private readonly busyUntil = new Map<string, number>();
+
+  /**
+   * Remembers that a provider is at its concurrency limit.
+   *
+   * A busy provider is skipped until the cooldown passes, so one task never
+   * hammers the same exhausted provider five times in a row.
+   */
+  private noteFailure(id: string, error: unknown): void {
+    if (error instanceof ProviderError && error.status === 429) {
+      this.busyUntil.set(id, Date.now() + 15_000);
+    }
+  }
+
+  /** Whether a provider is still serving its cooldown. */
+  private isCoolingDown(id: string): boolean {
+    const until = this.busyUntil.get(id);
+    if (until === undefined) return false;
+    if (until <= Date.now()) {
+      this.busyUntil.delete(id);
+      return false;
+    }
+    return true;
+  }
+
   /** Replaces the provider catalogue (e.g. after a config reload). */
   setProviders(configs: ProviderConfig[]): void {
     this.providers.clear();
@@ -124,23 +150,33 @@ export class ModelGateway {
     // Free tiers enforce concurrency, not just rate: two tasks at once and
     // every request comes back 429. That is transient, so ride it out for a
     // few seconds before telling the reader to try again.
-    const deadline = Date.now() + 30_000;
-    let wait = 4_000;
+    //
+    // The window is deliberately short. Every retry is another bill for the
+    // user, and a provider that just answered 429 will answer 429 again: a
+    // provider that is busy is put on a cooldown and skipped until it is not.
+    const deadline = Date.now() + 12_000;
+    let wait = 5_000;
 
     for (;;) {
       const errors: unknown[] = [];
 
-      try {
-        return await primary.chat(tracked);
-      } catch (err) {
-        const malformed =
-          err instanceof ProviderError && (err.status === 400 || err.status === 422);
-        if (malformed || streamed || request.signal?.aborted) throw err;
-        errors.push(err);
+      if (!this.isCoolingDown(primary.config.id)) {
+        try {
+          return await primary.chat(tracked);
+        } catch (err) {
+          const malformed =
+            err instanceof ProviderError && (err.status === 400 || err.status === 422);
+          if (malformed || streamed || request.signal?.aborted) throw err;
+          this.noteFailure(primary.config.id, err);
+          errors.push(err);
+        }
       }
 
       const alternatives = this.listProviders().filter(
-        (cfg) => cfg.id !== primary.config.id && isConfigured(cfg),
+        (cfg) =>
+          cfg.id !== primary.config.id &&
+          isConfigured(cfg) &&
+          !this.isCoolingDown(cfg.id),
       );
       for (const cfg of alternatives) {
         if (request.signal?.aborted) throw errors.at(-1);
@@ -150,6 +186,7 @@ export class ModelGateway {
           const malformed =
             next instanceof ProviderError && (next.status === 400 || next.status === 422);
           if (malformed || streamed) throw next;
+          this.noteFailure(cfg.id, next);
           errors.push(next);
         }
       }

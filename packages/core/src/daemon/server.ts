@@ -32,6 +32,8 @@ export interface DaemonOptions {
   approvals: ApprovalManager;
   bridge: BrowserBridge;
   sessionGuard: SessionGuard;
+  /** Whether to ask the model for follow-up questions after an answer. */
+  suggestions?: boolean;
   version?: string;
 }
 
@@ -203,6 +205,24 @@ export class Daemon {
           activeTab,
           info: this.options.bridge.info,
         });
+      }
+
+      if (route === API_ROUTES.browserViewport && method === 'POST') {
+        // Start or stop the live viewport: a stream of frames of the page the
+        // user is looking at, rather than a screenshot every few seconds.
+        const body = (await readJson<{ action?: string }>(req)) ?? {};
+        const action = body.action === 'stop' ? 'stop' : body.action === 'status' ? 'status' : 'start';
+        try {
+          const result = await this.options.bridge.send('viewport', { action }, { timeoutMs: 8000 });
+          return this.sendJson(res, 200, { ok: true, result });
+        } catch (err) {
+          return this.sendError(
+            res,
+            500,
+            'BROWSER_ERROR',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       }
 
       if (route === API_ROUTES.browserScreenshot && method === 'GET') {

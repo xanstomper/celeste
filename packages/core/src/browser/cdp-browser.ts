@@ -40,6 +40,8 @@ export class CdpBrowser implements BrowserClient {
   private activeTabUrl = 'about:blank';
   private activeTabTitle = 'New Tab';
   private lastActiveTime = 0;
+  /** Routes CDP events (not responses) to whoever is listening. */
+  private eventHandler: ((method: string, params: any) => void) | null = null;
 
   constructor(options: CdpBrowserOptions = {}) {
     this.port = options.debugPort ?? 9222;
@@ -92,6 +94,15 @@ export class CdpBrowser implements BrowserClient {
       '--window-size=1280,800',
     ];
 
+    // The fallback browser must never steal the user's screen. It runs
+    // headless unless someone explicitly asks to watch it
+    // (CELESTE_HEADFUL=1), so a task can never pop a window in front of
+    // whatever the user is doing. The visible browser is the one the user
+    // starts themselves with `celeste browse`.
+    if (process.env.CELESTE_HEADFUL !== '1') {
+      args.push('--headless=new', '--disable-gpu', '--mute-audio');
+    }
+
     if (this.extensionDir && existsSync(this.extensionDir)) {
       args.push(`--load-extension=${this.extensionDir}`);
     }
@@ -100,7 +111,10 @@ export class CdpBrowser implements BrowserClient {
     const child = spawn(this.browserBin, args, {
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0' },
+      env: {
+        ...process.env,
+        DISPLAY: process.env.CELESTE_HEADFUL === '1' ? (process.env.DISPLAY || ':0') : '',
+      },
     });
     child.unref();
 
@@ -176,6 +190,9 @@ export class CdpBrowser implements BrowserClient {
           const resolver = this.pending.get(msg.id);
           this.pending.delete(msg.id);
           resolver?.(msg);
+        } else if (msg.method && this.eventHandler) {
+          // An event, not a response: screencast frames arrive this way.
+          this.eventHandler(msg.method, msg.params ?? {});
         }
       } catch {
         /* ignore */
@@ -254,6 +271,46 @@ export class CdpBrowser implements BrowserClient {
       data: res?.data ?? '',
       mimeType: 'image/jpeg',
     };
+  }
+
+  /**
+   * Streams live frames of the page.
+   *
+   * This is what turns the viewport from a series of screenshots into a
+   * moving picture: the browser pushes a frame whenever the page changes.
+   */
+  async startScreencast(
+    onFrame: (frame: { data: string; sessionId: number }) => void,
+    options: { quality?: number; maxWidth?: number; maxHeight?: number } = {},
+  ): Promise<void> {
+    await this.stopScreencast();
+    await this.getPageWs();
+    this.eventHandler = (method, params) => {
+      if (method !== 'Page.screencastFrame') return;
+      const data = params?.data;
+      if (typeof data !== 'string' || data.length === 0) return;
+      const sessionId = params?.sessionId;
+      onFrame({ data, sessionId });
+      // Chrome only sends the next frame once the previous one is acked.
+      void this.cdpSend('Page.screencastFrameAck', { sessionId }).catch(() => undefined);
+    };
+    await this.cdpSend('Page.startScreencast', {
+      format: 'jpeg',
+      quality: options.quality ?? 60,
+      maxWidth: options.maxWidth ?? 1280,
+      maxHeight: options.maxHeight ?? 800,
+      everyNthFrame: 1,
+    });
+  }
+
+  /** Stops the frame stream. */
+  async stopScreencast(): Promise<void> {
+    this.eventHandler = null;
+    try {
+      await this.cdpSend('Page.stopScreencast');
+    } catch {
+      /* nothing was streaming */
+    }
   }
 
   /** Dispatches a real mouse click with an injected ripple marker on the page. */

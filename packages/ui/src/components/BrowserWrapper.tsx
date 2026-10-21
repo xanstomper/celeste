@@ -4,6 +4,8 @@ import { Icon } from './Icon';
 
 export interface BrowserWrapperProps {
   activeAction?: BrowserActionInfo | null;
+  /** The newest live frame of the browser, when the viewport is streaming. */
+  frame?: { data: string; mimeType: string; at: number } | null;
   browserHistory?: BrowserActionInfo[];
   extensionConnected?: boolean;
   onClose?: () => void;
@@ -17,6 +19,7 @@ export interface BrowserWrapperProps {
 
 export function BrowserWrapper({
   activeAction,
+  frame,
   browserHistory = [],
   extensionConnected = true,
   onClose,
@@ -328,7 +331,22 @@ export function BrowserWrapper({
 
       {/* 3. Live Screen Viewport (Interactive Web Wrapper) */}
       <div className="browser-wrapper__viewport">
-        {displayedAction?.screenshot ? (
+        {frame ? (
+          // A real frame of the page, streamed live - not a screenshot.
+          <div className="browser-viewport__canvas-wrap browser-viewport__canvas-wrap--live">
+            <img
+              ref={imgRef}
+              src={`data:${frame.mimeType};base64,${frame.data}`}
+              alt="Live browser viewport"
+              className="browser-viewport__img"
+              onClick={handleViewportClick}
+              title="Live viewport - click anywhere to interact with the webpage"
+            />
+            <span className="browser-viewport__live-badge">
+              <span className="browser-viewport__live-dot" /> LIVE
+            </span>
+          </div>
+        ) : displayedAction?.screenshot ? (
           <div className="browser-viewport__canvas-wrap">
             <img
               ref={imgRef}

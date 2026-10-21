@@ -18,6 +18,13 @@ export interface CelesteConfig {
   maxSteps?: number;
   /** Enable the extension transport listener. */
   bridgePort?: number;
+  /**
+   * Ask the model for follow-up questions after every answer.
+   *
+   * Off by default: it is a second model call for every single task, and
+   * the user's inference quota is finite.
+   */
+  suggestions?: boolean;
   /** Extra providers discovered from the environment. */
   [key: string]: unknown;
 }

@@ -86,6 +86,15 @@ export type DaemonEvent =
     }
   | { type: 'task.canvas'; taskId: string; canvas: CanvasState; at: number }
   | { type: 'task.browser.action'; taskId: string; action: BrowserActionInfo; at: number }
+  /** A live frame of the browser, pushed continuously while the viewport is open. */
+  | {
+      type: 'browser.frame';
+      /** base64 image data, without the data-url prefix. */
+      data: string;
+      mimeType: string;
+      tabId?: number;
+      at: number;
+    }
   | { type: 'extension.status'; connected: boolean; detail?: string; at: number }
   | { type: 'provider.changed'; providerId: string; model: string; at: number }
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string; at: number };
@@ -135,6 +144,12 @@ export interface CreateSessionRequest {
   autoApprove?: boolean;
   /** Where generated files should be written. */
   outputDir?: string;
+  /**
+   * Ask for follow-up questions when the answer arrives.
+   *
+   * Off unless asked for: it is an extra model call per task.
+   */
+  suggestions?: boolean;
 }
 
 export interface CreateSessionResponse {
@@ -200,6 +215,7 @@ export const API_ROUTES = {
   browserClick: '/api/browser/click',
   browserType: '/api/browser/type',
   browserScroll: '/api/browser/scroll',
+  browserViewport: '/api/browser/viewport',
   /** Generic passthrough for bridge verbs that have no bespoke REST route. */
   browserAction: '/api/browser/action',
   websocket: '/ws',

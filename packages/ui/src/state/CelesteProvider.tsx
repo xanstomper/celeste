@@ -77,6 +77,14 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
   }, [state.settings.apiBase]);
 
   const applyTransportEvent = useCallback((event: DaemonEvent) => {
+    // Live frames arrive constantly; they are not part of a thread.
+    if (event.type === 'browser.frame') {
+      dispatch({
+        type: 'viewport-frame',
+        frame: { data: event.data, mimeType: event.mimeType, at: event.at },
+      });
+      return;
+    }
     if (!deduperRef.current.accept(event)) return;
     const sessionId = 'taskId' in event ? event.taskId : '';
     dispatch({ type: 'event', sessionId, event });
@@ -172,6 +180,48 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
   /** Opens a blank thread: no active session, no events on screen. */
   const newTask = useCallback(() => {
     dispatch({ type: 'select', id: null });
+  }, []);
+
+  /**
+   * Refreshes the page the user's browser is showing.
+   *
+   * The composer offers it as context: "ask about this page".
+   */
+  const refreshActiveTab = useCallback(async () => {
+    const current = transportRef.current;
+    if (!current) return;
+    try {
+      const status = await current.getBrowserStatus?.();
+      const tab = status?.activeTab;
+      if (tab?.url) {
+        dispatch({ type: 'active-tab', tab: { url: tab.url, title: tab.title } });
+      }
+    } catch {
+      /* the browser may be busy */
+    }
+  }, []);
+
+  /** Starts the live viewport: a stream of frames of the page in the browser. */
+  const startViewport = useCallback(async () => {
+    const current = transportRef.current;
+    if (!current) return;
+    try {
+      await current.startViewport?.();
+    } catch {
+      /* the browser may be busy; the panel keeps the last frame */
+    }
+  }, []);
+
+  /** Stops the live viewport. */
+  const stopViewport = useCallback(async () => {
+    const current = transportRef.current;
+    if (!current) return;
+    try {
+      await current.stopViewport?.();
+    } catch {
+      /* nothing to stop */
+    }
+    dispatch({ type: 'viewport-frame', frame: null });
   }, []);
 
   const createSession = useCallback(
@@ -525,6 +575,9 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
     () => ({
       selectSession,
       newTask,
+      startViewport,
+      stopViewport,
+      refreshActiveTab,
       createSession,
       sendMessage,
       respondApproval,
@@ -545,6 +598,9 @@ export function CelesteProvider({ children }: { children: ReactNode }) {
     }),
     [
       selectSession,
+      startViewport,
+      stopViewport,
+      refreshActiveTab,
       createSession,
       sendMessage,
       respondApproval,

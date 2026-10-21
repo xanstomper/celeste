@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { CanvasKind, CanvasState } from '@celeste/protocol';
 import { Markdown } from '../lib/markdown';
 import { Icon } from './Icon';
+import { CanvasBoard } from './canvas/CanvasBoard';
 
 export interface CanvasPaneProps {
   canvas: CanvasState | null;
@@ -113,6 +114,12 @@ export function CanvasPane({ canvas, onClose, onAsk }: CanvasPaneProps) {
     return canvas.content.split(/\s+/).filter(Boolean).length;
   }, [canvas?.content]);
 
+  // A board canvas has a structured source; a web-page canvas has HTML.
+  const specSource = useMemo(
+    () => (canvas?.spec ? JSON.stringify(canvas.spec, null, 2) : null),
+    [canvas?.spec],
+  );
+
   return (
     <section className="canvas-pane" aria-label="Canvas Workspace">
       <header className="canvas-pane__head">
@@ -177,10 +184,14 @@ export function CanvasPane({ canvas, onClose, onAsk }: CanvasPaneProps) {
             <button
               type="button"
               className="button button--ghost"
-              onClick={() => download(safeName(canvas.title, 'html'), canvas.content, 'text/html')}
+              onClick={() =>
+                canvas.spec
+                  ? download(safeName(canvas.title, 'json'), specSource ?? '{}', 'application/json')
+                  : download(safeName(canvas.title, 'html'), canvas.content, 'text/html')
+              }
             >
               <Icon name="file" size={13} />
-              Export HTML
+              {canvas.spec ? 'Export JSON' : 'Export HTML'}
             </button>
           ) : null}
 
@@ -255,7 +266,40 @@ export function CanvasPane({ canvas, onClose, onAsk }: CanvasPaneProps) {
             </article>
           )
         ) : canvas.kind === 'visual' ? (
-          viewMode === 'code' ? (
+          canvas.spec ? (
+            // A board: drawn by the panel, not an HTML page in a frame.
+            viewMode === 'code' ? (
+              <div className="canvas__code">
+                <div className="canvas__code-head">
+                  <span>Board source</span>
+                  <button
+                    type="button"
+                    className="button button--ghost button--sm"
+                    onClick={() => void navigator.clipboard.writeText(specSource ?? '').catch(() => undefined)}
+                  >
+                    <Icon name="copy" size={12} /> Copy
+                  </button>
+                </div>
+                <pre>{specSource}</pre>
+              </div>
+            ) : viewMode === 'split' ? (
+              <div className="canvas__split">
+                <div className="canvas__split-pane canvas__split-pane--code">
+                  <div className="canvas__code-head">
+                    <span>Source</span>
+                  </div>
+                  <pre>{specSource}</pre>
+                </div>
+                <div className="canvas__split-pane canvas__split-pane--preview">
+                  <CanvasBoard spec={canvas.spec} title={canvas.title} />
+                </div>
+              </div>
+            ) : (
+              <div className="canvas__board">
+                <CanvasBoard spec={canvas.spec} title={canvas.title} />
+              </div>
+            )
+          ) : viewMode === 'code' ? (
             <div className="canvas__code">
               <div className="canvas__code-head">
                 <span>HTML/CSS/JS Source</span>

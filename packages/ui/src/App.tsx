@@ -28,6 +28,7 @@ function Workspace() {
   const [research, setResearch] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'browser' | 'canvas'>('chat');
   const [splitView, setSplitView] = useState(false);
+  const [liveViewport, setLiveViewport] = useState(false);
   const [sidePane, setSidePane] = useState<'browser' | 'canvas'>('browser');
   const [canvasOpen, setCanvasOpen] = useState(false);
   const canvasSeenRef = useRef<string | null>(null);
@@ -58,6 +59,30 @@ function Workspace() {
     }
     if (!canvasId) canvasSeenRef.current = null;
   }, [canvasId, activeTask?.status]);
+
+  // Keep the "ask about this page" chip honest: it must describe the page
+  // that is open right now.
+  useEffect(() => {
+    void actions.refreshActiveTab();
+    const timer = window.setInterval(() => {
+      void actions.refreshActiveTab();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [actions]);
+
+  // The live viewport streams frames of the page while the browser pane is
+  // open. It costs nothing when the page is idle, and it is the difference
+  // between a frozen screenshot and a window into what the agent sees.
+  useEffect(() => {
+    const wanted = splitView || activeTab === 'browser';
+    if (wanted === liveViewport) return;
+    setLiveViewport(wanted);
+    if (wanted) {
+      void actions.startViewport();
+    } else {
+      void actions.stopViewport();
+    }
+  }, [splitView, activeTab, liveViewport, actions]);
 
   // Auto-open live browser in split view on desktop when the agent starts browser actions!
   const hasBrowserAction = Boolean(activeTask?.activeBrowser);
@@ -436,6 +461,7 @@ function Workspace() {
                     research={research}
                     onResearchChange={setResearch}
                     onSend={handleSend}
+                    page={state.activeTab}
                     busy={state.busy}
                     hasSession={state.activeSessionId !== null && composerMode === 'reply'}
                     running={isRunning}
@@ -451,6 +477,7 @@ function Workspace() {
                 {sidePane === 'browser' ? (
                   <BrowserWrapper
                     activeAction={currentBrowserAction}
+                    frame={state.viewportFrame}
                     browserHistory={currentBrowserHistory}
                     extensionConnected={state.extensionConnected}
                     onClose={() => setSplitView(false)}

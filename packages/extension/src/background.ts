@@ -21,6 +21,8 @@ import { dispatchCommand, ensureContentScript } from './dispatcher.js';
 import { consoleLog, downloadLog, forgetTab, networkLog, recordNetworkEntry } from './state.js';
 import type { BridgeState, ConsoleEntry, DownloadEntry } from './types.js';
 import type { NetworkEntry } from './protocol.js';
+import { releaseDebugger } from './debugger.js';
+import { setFrameSink } from './viewport.js';
 
 const DEFAULT_PORT = 9223;
 const PORT_KEY = 'bridgePort';
@@ -105,6 +107,16 @@ const bridge = new Bridge({
 
 /** Messages that could not be delivered because the socket was down. */
 const outbox: string[] = [];
+
+// Live viewport frames go straight to the daemon as they are captured.
+setFrameSink((frame) => {
+  const message = encodeClientMessage({
+    v: PROTOCOL_VERSION,
+    type: 'viewport.frame',
+    payload: frame,
+  });
+  if (!bridge.send(message)) enqueue(message);
+});
 
 function enqueue(raw: string): void {
   outbox.push(raw);
@@ -263,6 +275,8 @@ function emitEvent(event: ExtensionEvent): void {
 /* -------------------------------------------------------------------------- */
 
 interface RuntimeMessage {
+  /** The passage the user selected on the page, when they asked about one. */
+  selection?: string;
   type?: string;
   event?: ExtensionEvent;
   port?: number;
@@ -284,9 +298,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       void (async () => {
         const url = String(msg.url ?? '');
         const title = String(msg.title ?? '');
-        const prompt = `Analyse the page currently open in the browser at ${url}${
-          title ? ` ("${title}")` : ''
-        }. Summarise what it says, extract the key facts, and tell me what it is about.`;
+        const selection = String(msg.selection ?? '').trim();
+        const prompt = selection
+          ? `Look at the page open in the browser at ${url}${title ? ` ("${title}")` : ''}. I selected this passage:\n\n"\"\"\n${selection}\n"\"\"\n\nExplain it clearly, and answer whatever question it raises.`
+          : `Analyse the page currently open in the browser at ${url}${
+              title ? ` ("${title}")` : ''
+            }. Summarise what it says, extract the key facts, and tell me what it is about.`;
 
         const request = encodeClientMessage({
           v: PROTOCOL_VERSION,
@@ -468,11 +485,15 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  void releaseDebugger();
   forgetTab(tabId);
   emitEvent({ type: 'tab.removed', payload: { id: tabId }, timestamp: Date.now() });
 });
 
 chrome.tabs.onActivated.addListener((info) => {
+  // The user moved on: let go of the debugger so the "debugging" banner goes
+  // away with them.
+  void releaseDebugger();
   emitEvent({ type: 'tab.activated', payload: { tabId: info.tabId, windowId: info.windowId }, timestamp: Date.now() });
 });
 

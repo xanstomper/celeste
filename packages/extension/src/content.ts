@@ -23,6 +23,7 @@ import type { ElementRef, ProtocolErrorShape, SnapshotElement, ToolErrorCode } f
 import { installAskButton } from './ask-button.js';
 import { CONTENT_CHANNEL } from './types.js';
 import type { ContentRequest, ContentResponse } from './types.js';
+import { installSelectionBubble, removeSelectionBubble } from './selection-ask.js';
 
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                     */
@@ -1560,6 +1561,23 @@ async function invoke(method: string, params: Record<string, unknown>): Promise<
       return { ok: true, ref, active: document.activeElement === el };
     }
 
+    case 'rect': {
+      // The viewport box of a referenced element. The debugger needs real
+      // coordinates to click, and the snapshot's boxes can go stale.
+      const ref = params['ref'] as string | undefined;
+      const el = requireElement(ref, 'rect target');
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = el.getBoundingClientRect();
+      return {
+        ok: true,
+        ref,
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    }
+
     case 'blur': {
       const ref = params['ref'] as string | undefined;
       const el = ref ? resolveElement(ref) : (document.activeElement as HTMLElement | null);
@@ -1766,6 +1784,7 @@ function bootstrap(): void {
   startSessionWatcher();
   requestPageSync();
   installAskButton();
+  installSelectionBubble();
   // If the MAIN-world hook is missing (page loaded before the extension), ask
   // the background worker to inject it.
   window.setTimeout(() => {

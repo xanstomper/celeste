@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Celeste",
   "version": "0.1.0",
-  "description": "Celeste (codename Boba) — an open-source AI browser agent that works directly in your browser, alongside the page you are reading.",
+  "description": "Celeste (codename Boba) \u2014 an open-source AI browser agent that works directly in your browser, alongside the page you are reading.",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabs",
@@ -12,10 +12,13 @@
     "alarms",
     "downloads",
     "webNavigation",
+    "debugger",
     "activeTab",
     "sidePanel"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -49,23 +52,35 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["page-hook.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "page-hook.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": false
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["openpanel.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "openpanel.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {

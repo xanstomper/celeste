@@ -176,6 +176,18 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     autoApprove: options.autoApprove ?? true,
   });
 
+  // Live viewport frames: the extension (or the headless browser) pushes
+  // them, and the panel renders them as they arrive.
+  bridge.on('viewport.frame', (frame: { data: string; mimeType: string; tabId?: number }) => {
+    bus.publish({
+      type: 'browser.frame',
+      data: frame.data,
+      mimeType: frame.mimeType,
+      ...(frame.tabId !== undefined ? { tabId: frame.tabId } : {}),
+      at: Date.now(),
+    });
+  });
+
   let daemon: Daemon | null = null;
   if (options.serve !== false) {
     daemon = new Daemon({
@@ -187,6 +199,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       approvals,
       bridge,
       sessionGuard,
+      suggestions: config.suggestions ?? false,
     });
     await daemon.start();
   }

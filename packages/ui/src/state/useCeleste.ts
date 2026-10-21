@@ -71,6 +71,10 @@ export interface CelesteState {
   settings: Settings;
   latestBrowserAction: BrowserActionInfo | null;
   browserHistory: BrowserActionInfo[];
+  /** The newest live frame of the browser, if the viewport is streaming. */
+  viewportFrame: { data: string; mimeType: string; at: number } | null;
+  /** The page currently open in the user's browser. */
+  activeTab: { url?: string; title?: string } | null;
   approvalDecisions: Record<string, 'approve' | 'deny'>;
   dismissedHumans: Record<string, true>;
   toasts: Toast[];
@@ -81,6 +85,12 @@ export interface CelesteActions {
   selectSession: (id: string) => void;
   /** Clears the active thread and shows the welcome state. */
   newTask: () => void;
+  /** Starts the live viewport stream. */
+  startViewport: () => Promise<void>;
+  /** Refreshes what page the user's browser is showing. */
+  refreshActiveTab: () => Promise<void>;
+  /** Stops the live viewport stream. */
+  stopViewport: () => Promise<void>;
   createSession: (
     prompt: string,
     focus?: SearchFocus,
@@ -172,6 +182,8 @@ export type CelesteAction =
   | { type: 'event'; sessionId: string; event: DaemonEvent }
   | { type: 'clearEvents' }
   | { type: 'browser'; action: BrowserActionInfo }
+  | { type: 'viewport-frame'; frame: { data: string; mimeType: string; at: number } | null }
+  | { type: 'active-tab'; tab: { url?: string; title?: string } | null }
   | { type: 'artifacts'; artifacts: Artifact[] }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'approvalDecision'; requestId: string; decision: 'approve' | 'deny' }
@@ -337,6 +349,12 @@ export function celesteReducer(
         browserHistory: [...state.browserHistory.slice(-29), action.action],
       };
 
+    case 'viewport-frame':
+      return { ...state, viewportFrame: action.frame };
+
+    case 'active-tab':
+      return { ...state, activeTab: action.tab };
+
     case 'artifacts':
       return { ...state, artifacts: action.artifacts };
 
@@ -385,6 +403,8 @@ export function initialCelesteState(): CelesteState {
     settings,
     latestBrowserAction: null,
     browserHistory: [],
+    viewportFrame: null,
+    activeTab: null,
     approvalDecisions: {},
     dismissedHumans: {},
     toasts: [],

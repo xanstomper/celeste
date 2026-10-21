@@ -19,6 +19,8 @@ import { CONTENT_CHANNEL } from './types.js';
 import type { ContentResponse } from './types.js';
 import { consoleLog, downloadLog, networkLog } from './state.js';
 import type { ConsoleEntry, DownloadEntry } from './types.js';
+import { clickAt, insertText, pressKey, scrollBy } from './debugger.js';
+import { isViewportRunning, startViewport, stopViewport } from './viewport.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const CONTENT_SCRIPT_FILE = 'content.js';
@@ -340,6 +342,26 @@ async function click(command: BrowserCommand, params: Record<string, unknown>): 
   const y = num(params, 'y');
   const button = (str(params, 'button') as 'left' | 'right' | 'middle' | undefined) ?? 'left';
 
+  // A real click moves the browser's focus into the page. Synthetic clicks
+  // do not, and a canvas editor never even notices them.
+  if (button === 'left') {
+    try {
+      let pointX = x;
+      let pointY = y;
+      if ((pointX === undefined || pointY === undefined) && ref) {
+        const box = (await callContent(tabId, 'rect', { ref })) as Record<string, unknown> | undefined;
+        pointX = typeof box?.['x'] === 'number' ? box['x'] : undefined;
+        pointY = typeof box?.['y'] === 'number' ? box['y'] : undefined;
+      }
+      if (typeof pointX === 'number' && typeof pointY === 'number') {
+        await clickAt(tabId, pointX, pointY);
+        return { tabId, ok: true, method: 'trusted', point: { x: pointX, y: pointY } };
+      }
+    } catch {
+      /* the debugger refused; use the synthetic click */
+    }
+  }
+
   const result = (await callContent(tabId, 'click', { ref, x, y, button })) as Record<string, unknown>;
   return { tabId, ...result };
 }
@@ -347,8 +369,15 @@ async function click(command: BrowserCommand, params: Record<string, unknown>): 
 async function type(command: BrowserCommand, params: Record<string, unknown>): Promise<unknown> {
   const tabId = await resolveTabId(command.tabId);
   const ref = str(params, 'ref');
-  if (!ref) throw new CelesteError('INVALID_ARGS', 'type requires a `ref`.');
   const text = str(params, 'text') ?? '';
+
+  // Trusted input first: canvas editors (Google Docs, Sheets) ignore the
+  // synthetic events the content script can produce, so a real browser-level
+  // insertion is the only way the text actually lands.
+  const trusted = await typeTrusted(tabId, ref, text);
+  if (trusted) return { tabId, ...trusted };
+
+  if (!ref) throw new CelesteError('INVALID_ARGS', 'type requires a `ref`.');
   const result = await callContent(tabId, 'type', {
     ref,
     text,
@@ -356,6 +385,36 @@ async function type(command: BrowserCommand, params: Record<string, unknown>): P
     delayMs: num(params, 'delayMs'),
   });
   return { tabId, ...(result as Record<string, unknown>) };
+}
+
+/**
+ * Types with browser-level input, falling back to nothing.
+ *
+ * Returns null when the debugger is unavailable so the caller can use the
+ * synthetic path instead.
+ */
+async function typeTrusted(
+  tabId: number,
+  ref: string | undefined,
+  text: string,
+): Promise<Record<string, unknown> | null> {
+  if (!text) return { ok: true, method: 'trusted', typed: 0 };
+  try {
+    // Focus the target with a real click: that moves the browser's focus
+    // into the page, which is what gives the text somewhere to go.
+    if (ref) {
+      const box = (await callContent(tabId, 'rect', { ref })) as Record<string, unknown> | undefined;
+      const x = typeof box?.['x'] === 'number' ? box['x'] : null;
+      const y = typeof box?.['y'] === 'number' ? box['y'] : null;
+      if (x !== null && y !== null) await clickAt(tabId, x, y);
+    }
+    await insertText(tabId, text);
+    return { ok: true, method: 'trusted', typed: text.length };
+  } catch (err) {
+    // The debugger could not attach (another debugger, a protected page).
+    // The synthetic path still works for ordinary DOM inputs.
+    return null;
+  }
 }
 
 async function fill(command: BrowserCommand, params: Record<string, unknown>): Promise<unknown> {
@@ -371,19 +430,36 @@ async function press(command: BrowserCommand, params: Record<string, unknown>): 
   const tabId = await resolveTabId(command.tabId);
   const key = str(params, 'key');
   if (!key) throw new CelesteError('INVALID_ARGS', 'press requires a `key`.');
-  const result = await callContent(tabId, 'press', {
-    key,
-    ref: str(params, 'ref'),
-    modifiers: strList(params, 'modifiers'),
-  });
-  return { tabId, ...(result as Record<string, unknown>) };
+  const modifiers = strList(params, 'modifiers');
+  try {
+    await pressKey(tabId, key, modifiers);
+    return { tabId, ok: true, method: 'trusted' };
+  } catch {
+    const result = await callContent(tabId, 'press', {
+      key,
+      ref: str(params, 'ref'),
+      modifiers,
+    });
+    return { tabId, ...(result as Record<string, unknown>) };
+  }
 }
 
 async function scroll(command: BrowserCommand, params: Record<string, unknown>): Promise<unknown> {
   const tabId = await resolveTabId(command.tabId);
+  const direction = str(params, 'direction') ?? 'down';
+  const amount = num(params, 'amount') ?? 400;
+  const deltaY = direction === 'up' ? -amount : direction === 'down' ? amount : 0;
+  if (deltaY !== 0) {
+    try {
+      await scrollBy(tabId, deltaY);
+      return { tabId, ok: true, method: 'trusted' };
+    } catch {
+      /* fall through to the synthetic path */
+    }
+  }
   const result = await callContent(tabId, 'scroll', {
-    direction: str(params, 'direction'),
-    amount: num(params, 'amount'),
+    direction,
+    amount,
     ref: str(params, 'ref'),
   });
   return { tabId, ...(result as Record<string, unknown>) };
@@ -886,6 +962,21 @@ export async function dispatchCommand(command: BrowserCommand): Promise<unknown>
       return download(command, params);
     case 'search':
       return search(command, params);
+    case 'viewport': {
+      // Live frames of the page the user is looking at.
+      const action = str(params, 'action') ?? 'start';
+      if (action === 'stop') {
+        await stopViewport();
+        return { ok: true, running: false };
+      }
+      if (action === 'status') {
+        return { ok: true, running: isViewportRunning() };
+      }
+      const started = await startViewport(() => {
+        /* the background's sink forwards frames to the daemon */
+      });
+      return { ok: true, running: true, ...started };
+    }
     default:
       throw new CelesteError('INVALID_ARGS', `Unknown browser action: ${String(action)}`);
   }

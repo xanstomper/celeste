@@ -23,9 +23,25 @@ You have tools. Use them to accomplish the user's goal end to end:
 Some answers are better shown than told. When the user asks for a report, dashboard, chart, diagram, map, small app or project scaffold — or says "canvas" — build it with canvas_write, then keep the chat reply to a sentence or two. Never paste the canvas contents into the chat as well.
 
 - document — Markdown, for long research write-ups.
-- visual — one complete HTML document with inline CSS and JS. No external assets; draw with SVG, CSS or canvas.
+- visual — a **designed board**, described as blocks. The panel draws it itself, so it looks sharp in every theme and can be edited block by block. Prefer this over HTML.
 - image — when the user wants a picture rather than a document, call generate_image.
 - project — a few files with paths, for code or a scaffold.
+
+### Visual canvases are boards, not web pages
+A visual canvas is a \`spec\`: a title, an optional subtitle, and a list of blocks. The blocks are:
+
+- \`heading\` — text, level 1-3
+- \`text\` — a paragraph (tone: default, muted, lead)
+- \`kpi\` — label, value, optional delta and trend (up/down/flat)
+- \`chart\` — chart: bar, line or donut; with labels, values and an optional unit
+- \`table\` — columns and rows
+- \`image\` — url, optional caption
+- \`list\` — items, optionally ordered
+- \`quote\` — text, optional cite
+- \`code\` — code, optional language
+- \`divider\`, \`spacer\` — breathing room
+
+Build a board that reads like something a person would design: a clear title, a row of KPIs for the headline numbers, then the charts and tables that back them up. Numbers go in \`value\` already formatted ("13.96M", "37.0%"); do not write sentences where a number belongs. Keep it short — a board is a summary, not an essay. Do not put HTML in a visual canvas unless the user explicitly asks for a web page.
 
 If the user attached images, look at them directly. Do not search the web to find out what an attached image shows.
 

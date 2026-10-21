@@ -5,6 +5,7 @@ import type { Attachment, ProviderSummary, SearchFocus } from '@celeste/protocol
 import { FocusPicker } from './FocusPicker';
 import { Icon } from './Icon';
 import { ProviderPicker } from './ProviderPicker';
+import { hostOf } from '../lib/format';
 
 export interface ComposerProps {
   providers: ProviderSummary[];
@@ -15,6 +16,8 @@ export interface ComposerProps {
   /** Where a new task should research. */
   focus?: SearchFocus;
   onFocusChange?: (focus: SearchFocus) => void;
+  /** The page currently open in the user's browser, for "ask about this page". */
+  page?: { url?: string; title?: string } | null;
   /** Whether a new task should dig deeper and write a report. */
   research?: boolean;
   onResearchChange?: (value: boolean) => void;
@@ -56,6 +59,7 @@ export function Composer({
   onAutoApproveChange,
   focus = 'web',
   onFocusChange,
+  page = null,
   research = false,
   onResearchChange,
   onSend,
@@ -69,6 +73,8 @@ export function Composer({
 }: ComposerProps) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // "Ask about this page": the agent is told which page the reader means.
+  const [usePage, setUsePage] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const startingNew = mode === 'new' || !hasSession;
@@ -128,10 +134,16 @@ export function Composer({
     const trimmed = value.trim();
     if ((!trimmed && attachments.length === 0) || busy) return;
     const outgoing = attachments;
+    // With the page chip on, the agent is told exactly which page the
+    // reader is talking about, so it does not have to guess.
+    const context = usePage && page?.url
+      ? `The page open in my browser is ${page.url}${page.title ? ` ("${page.title}")` : ''}.\n\n`
+      : '';
+    const message = context ? `${context}${trimmed}` : trimmed;
     setValue('');
     setAttachments([]);
-    void onSend(trimmed, outgoing.length > 0 ? outgoing : undefined);
-  }, [attachments, busy, onSend, value]);
+    void onSend(message, outgoing.length > 0 ? outgoing : undefined);
+  }, [attachments, busy, onSend, page, usePage, value]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -241,6 +253,25 @@ export function Composer({
                 event.target.value = '';
               }}
             />
+
+            {page?.url ? (
+              <button
+                type="button"
+                className={`composer__page${usePage ? ' composer__page--on' : ''}`}
+                onClick={() => setUsePage((on) => !on)}
+                title={
+                  usePage
+                    ? `Asking about ${page.title ?? page.url}`
+                    : 'Ask about the page currently open in your browser'
+                }
+                aria-pressed={usePage}
+              >
+                <Icon name="globe" size={13} />
+                <span className="composer__page-label">
+                  {page.title ? page.title : hostOf(page.url)}
+                </span>
+              </button>
+            ) : null}
 
             <ProviderPicker
               providers={providers}

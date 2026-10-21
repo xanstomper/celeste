@@ -156,6 +156,10 @@ export interface DaemonTransport {
   clickBrowser?(point: { x: number; y: number }, ref?: string): Promise<{ ok: boolean; result?: unknown }>;
   typeBrowser?(text: string, ref?: string): Promise<{ ok: boolean; result?: unknown }>;
   scrollBrowser?(deltaY?: number): Promise<{ ok: boolean; result?: unknown }>;
+  /** Starts the live viewport stream. */
+  startViewport?(): Promise<{ ok: boolean; result?: unknown }>;
+  /** Stops the live viewport stream. */
+  stopViewport?(): Promise<{ ok: boolean; result?: unknown }>;
   /** Subscribe to the event stream of a single session. */
   subscribe(sessionId: string, onEvent: (event: DaemonEvent) => void): () => void;
   /** Subscribe to every event the daemon emits (used by the websocket). */
@@ -276,6 +280,20 @@ export class HttpTransport implements DaemonTransport {
     return request(this.base, API_ROUTES.browserScroll, {
       method: 'POST',
       body: { deltaY },
+    });
+  }
+
+  async startViewport(): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserViewport, {
+      method: 'POST',
+      body: { action: 'start' },
+    });
+  }
+
+  async stopViewport(): Promise<{ ok: boolean; result?: unknown }> {
+    return request(this.base, API_ROUTES.browserViewport, {
+      method: 'POST',
+      body: { action: 'stop' },
     });
   }
 
